@@ -246,14 +246,78 @@ def _run(conn, sims):
             "advance": rr["r32"] / n, "r16": rr["r16"] / n, "qf": rr["qf"] / n,
             "sf": rr["sf"] / n, "final": rr["final"] / n, "champion": rr["champion"] / n,
         }
+    # ── projected bracket: assemble ONE internally-consistent (realizable)
+    # bracket instead of picking each slot's modal team independently (which
+    # lets a strong team be the favorite in two mutually-exclusive slots at
+    # once — e.g. both the Final and the 3rd-place match). We build a coherent
+    # R32 field from the simulated standings, then propagate the favored winner
+    # of each match forward so every later slot is fed by a real prior result.
+    # Confidence is still the per-slot *marginal* P(team occupies this slot).
+    group_teams = {}
+    for t, g in team_group.items():
+        group_teams.setdefault(g, []).append(t)
+
+    def _exp_rank(t):                       # lower = finishes higher on average
+        c = rank_counts[t]
+        tot = sum(c.values()) or 1
+        return sum(r * k for r, k in c.items()) / tot
+
+    proj_pos = {}                           # (pos, group) -> projected team
+    for g, ts in group_teams.items():
+        for i, t in enumerate(sorted(ts, key=_exp_rank)):
+            proj_pos[(i + 1, g)] = t
+
+    # 8 best projected third-placers -> the "3X/Y" R32 slots (same matcher as live)
+    third_groups = sorted(group_teams,
+                          key=lambda g: -teams_out[proj_pos[(3, g)]]["advance"])[:8]
+    team_of_group = {g: proj_pos[(3, g)] for g in third_groups}
+    third_assign = _assign_thirds(third_slots, set(third_groups), team_of_group)
+
+    res = {}                                # num -> {team1, team2, winner, loser}
+
+    def _resolve(slot, num, side):
+        if not slot:
+            return None
+        gm = GROUP_SLOT_RE.match(slot)
+        if gm:
+            return proj_pos.get((int(gm.group(1)), gm.group(2)))
+        if THIRD_SLOT_RE.match(slot):
+            return third_assign.get((num, side))
+        wm = WINNER_RE.match(slot)
+        if wm:
+            r = res.get(int(wm.group(1)))
+            return r["winner"] if r else None
+        lm = LOSER_RE.match(slot)
+        if lm:
+            r = res.get(int(lm.group(1)))
+            return r["loser"] if r else None
+        return slot                         # already a literal team name (seeded/finished)
+
+    ko_meta = {m["num"]: m for m in ko}
+    for num in sorted(ko_meta):
+        m = ko_meta[num]
+        if m["status"] == "finished" and m["score1"] is not None:
+            t1, t2 = m["team1"], m["team2"]
+            w, l = (t1, t2) if m["score1"] >= m["score2"] else (t2, t1)
+        else:
+            t1 = _resolve(m["slot1"], num, "team1")
+            t2 = _resolve(m["slot2"], num, "team2")
+            if not t1 or not t2:
+                res[num] = {"team1": t1, "team2": t2, "winner": None, "loser": None}
+                continue
+            # favored winner of the *projected* pairing advances (Elo == model pick)
+            w, l = (t1, t2) if ratings.get_rating(t1) >= ratings.get_rating(t2) else (t2, t1)
+        res[num] = {"team1": t1, "team2": t2, "winner": w, "loser": l}
+
     slots_out = {}
     for num in slot_counts:
         entry = {"round": round_of(num)}
+        r = res.get(num, {})
         for side in ("team1", "team2"):
-            ctr = slot_counts[num][side]
-            if ctr:
-                team, cnt = ctr.most_common(1)[0]
-                entry[side] = {"team": team, "conf": round(cnt / n, 3)}
+            team = r.get(side)
+            if team:
+                conf = slot_counts[num][side].get(team, 0) / n
+                entry[side] = {"team": team, "conf": round(conf, 3)}
             else:
                 entry[side] = None
         slots_out[num] = entry
