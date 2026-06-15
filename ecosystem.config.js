@@ -23,5 +23,16 @@ module.exports = {
       cron_restart: '*/15 * * * *',
       autorestart: false,
     },
+    {
+      // Publish a small live-data snapshot to docs/data/live.json and push it
+      // to GitHub so the Pages landing site stays current. Runs a few minutes
+      // behind the updater; only commits when the content actually changed.
+      name: 'worldcup-2026-pages',
+      script: '/var/www/worldcup-2026/publish_pages.py',
+      interpreter: '/var/www/worldcup-2026/venv/bin/python',
+      cwd: '/var/www/worldcup-2026',
+      cron_restart: '3,18,33,48 * * * *',
+      autorestart: false,
+    },
   ],
 };

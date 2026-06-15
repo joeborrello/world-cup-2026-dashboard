@@ -61,6 +61,26 @@
   .chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
   .chip{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:7px 13px;font-size:14px;font-weight:500}
 
+  /* live strip */
+  .live-strip{background:#fff;border-bottom:1px solid var(--line)}
+  .ls-inner{display:flex;flex-wrap:wrap;align-items:center;gap:12px 26px;padding-top:13px;padding-bottom:13px}
+  .ls-head{display:flex;align-items:center;gap:8px;font-weight:700;font-size:14px}
+  .ls-dot{width:9px;height:9px;border-radius:50%;background:#c2c2c2;flex:none}
+  .ls-dot.on{background:var(--red);animation:lspulse 1.6s infinite}
+  @keyframes lspulse{0%{box-shadow:0 0 0 0 rgba(200,54,47,.5)}70%{box-shadow:0 0 0 7px rgba(200,54,47,0)}100%{box-shadow:0 0 0 0 rgba(200,54,47,0)}}
+  .ls-upd{color:var(--muted);font-weight:500;font-size:12.5px}
+  .ls-body{display:flex;flex-wrap:wrap;align-items:center;gap:10px 22px;flex:1}
+  .ls-today{display:flex;flex-wrap:wrap;gap:7px 16px}
+  .ls-m{display:flex;align-items:center;gap:5px;font-size:14px;white-space:nowrap}
+  .ls-m img{width:18px;height:13px;border-radius:2px}
+  .ls-sc{font-weight:700}
+  .ls-vs{color:var(--muted)}
+  .ls-badge{color:var(--red);font-weight:700;font-size:10.5px;border:1px solid var(--red);border-radius:4px;padding:0 4px;margin-left:1px}
+  .ls-odds{display:flex;flex-wrap:wrap;align-items:center;gap:6px 12px;font-size:13.5px;color:var(--muted)}
+  .ls-odds .o{display:flex;align-items:center;gap:5px}
+  .ls-odds .o img{width:17px;height:12px;border-radius:2px}
+  .ls-odds .o b{color:var(--ink)}
+  .ls-label{font-weight:700;color:var(--ink)}
   footer{padding:40px 0;text-align:center;color:var(--muted);font-size:14px}
   footer a{color:var(--green-d)}
   .note{font-size:13px;color:var(--muted);max-width:680px;margin:18px auto 0;text-align:center}
@@ -82,6 +102,17 @@
     </div>
   </div>
 </header>
+
+<div class="live-strip" id="liveStrip" hidden>
+  <div class="wrap ls-inner">
+    <div class="ls-head"><span class="ls-dot" id="lsDot"></span><span id="lsPhase"></span>
+      <span class="ls-upd" id="lsUpd"></span></div>
+    <div class="ls-body">
+      <div class="ls-today" id="lsToday"></div>
+      <div class="ls-odds" id="lsOdds"></div>
+    </div>
+  </div>
+</div>
 
 <section>
   <div class="wrap">
@@ -166,6 +197,73 @@
        Maps © OpenStreetMap contributors</p>
   </div>
 </footer>
+
+<script>
+/* Live strip: reads the snapshot the droplet publishes to docs/data/live.json
+   every ~15 min and refreshes it client-side a few times an hour. Stays hidden
+   if the snapshot isn't there yet. */
+(function () {
+  var strip = document.getElementById('liveStrip');
+  var flag = function (c, n) { return c ?
+    '<img src="https://flagcdn.com/' + c + '.svg" alt="' + (n || '') + '">' : ''; };
+  var fmtTime = function (iso) {
+    try { return new Date(iso).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' }); }
+    catch (e) { return ''; }
+  };
+  var ago = function (iso) {
+    var s = Math.max(0, (Date.now() - new Date(iso).getTime()) / 1000);
+    if (s < 90) return 'just now';
+    if (s < 3600) return Math.round(s / 60) + ' min ago';
+    if (s < 86400) return Math.round(s / 3600) + ' hr ago';
+    return Math.round(s / 86400) + ' d ago';
+  };
+
+  function render(d) {
+    var anyLive = (d.today || []).some(function (m) { return m.state; });
+    document.getElementById('lsDot').className = 'ls-dot' + (anyLive ? ' on' : '');
+    document.getElementById('lsPhase').textContent = (anyLive ? 'LIVE · ' : '') + (d.phase || '');
+    document.getElementById('lsUpd').textContent = d.generated ? '· updated ' + ago(d.generated) : '';
+
+    var today = d.today || [];
+    var todayEl = document.getElementById('lsToday');
+    if (!today.length) {
+      todayEl.innerHTML = '<span class="ls-vs">No matches today</span>';
+    } else {
+      todayEl.innerHTML = today.map(function (m) {
+        var live = !!m.state, done = m.status === 'finished';
+        var mid;
+        if (live || done) {
+          var badge = m.state === 'paused' ? '<span class="ls-badge">HT</span>'
+            : m.state ? '<span class="ls-badge">LIVE</span>' : '';
+          mid = '<span class="ls-sc">' + (m.score1 == null ? 0 : m.score1) + '–' +
+            (m.score2 == null ? 0 : m.score2) + '</span>' + badge;
+        } else {
+          mid = '<span class="ls-vs">' + fmtTime(m.utc_datetime) + '</span>';
+        }
+        return '<span class="ls-m">' + flag(m.code1, m.team1) + m.team1 + ' ' + mid +
+          ' ' + flag(m.code2, m.team2) + m.team2 + '</span>';
+      }).join('');
+    }
+
+    var odds = d.title_odds || [];
+    document.getElementById('lsOdds').innerHTML = odds.length
+      ? '<span class="ls-label">Title odds</span>' + odds.map(function (o) {
+          return '<span class="o">' + flag(o.code, o.team) + o.team +
+            ' <b>' + Math.round(o.champion * 100) + '%</b></span>';
+        }).join('')
+      : '';
+    strip.hidden = false;
+  }
+
+  function load() {
+    fetch('data/live.json?t=' + Date.now(), { cache: 'no-store' })
+      .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+      .then(render).catch(function () { /* snapshot not published yet */ });
+  }
+  load();
+  setInterval(load, 180000);
+})();
+</script>
 
 </body>
 </html>
