@@ -63,9 +63,17 @@ A [MiroFish](https://github.com/666ghj/MiroFish)-inspired layer: four opinionate
 
 The bracket's **Projected** mode and the **Predictions** page are driven by a Monte-Carlo simulation that plays the rest of the tournament many thousands of times and tallies how often each outcome occurs. It's deliberately simple and transparent so the assumptions are easy to inspect — and to critique. Finished results are held fixed; only unplayed matches are simulated, so the numbers sharpen as the tournament unfolds. The implementation is pure-Python with no numerical dependencies: `predict.py` (simulation), `ratings.py` (priors), `compute.py` (standings + tiebreakers). *(This section mirrors the in-app "How the projections work" modal — keep the two in sync.)*
 
-### 1. Team strength (Elo priors)
+### 1. Team strength (dynamic Elo)
 
-Each team carries a single rating on the [World-Football-Elo](https://en.wikipedia.org/wiki/World_Football_Elo_Ratings) scale (≈2100+ elite, ≈1900 strong, ≈1750 mid, ≈1600 weaker) — a hand-set, roughly early-2026 snapshot in `ratings.py`. Co-hosts (USA, Canada, Mexico) receive a flat **+60** home-advantage bonus; an unknown name falls back to 1700. These are *static priors*: the model never re-estimates a rating mid-tournament. Instead it pins down actual results and re-simulates the remainder, so a slightly-off prior self-corrects as games are played.
+Each team **starts** from a prior rating on the [World-Football-Elo](https://en.wikipedia.org/wiki/World_Football_Elo_Ratings) scale (≈2100+ elite, ≈1900 strong, ≈1750 mid, ≈1600 weaker) — a hand-set, roughly early-2026 snapshot in `ratings.py`. Co-hosts (USA, Canada, Mexico) receive a flat **+60** home-advantage bonus; an unknown name falls back to 1700.
+
+Those priors then **update from in-tournament results**. Finished matches are replayed in chronological order and each team's rating moves by the standard World-Football-Elo update, so an over- or under-performing side carries that form into the simulation of its remaining matches:
+
+```
+R' = R + K · G · (W − We)
+```
+
+`W` is the actual result (1 / 0.5 / 0), `We` the Elo win-expectancy, `G` a goal-margin multiplier (`1`, `1.5` for a 2-goal win, then `(11+d)/8` for margin `d ≥ 3`), and `K = 60` — the World-Cup tier, deliberately responsive. Early on ratings sit at the priors and diverge as results land; the biggest movers are shown on the Predictions page's **Form tracker**. Tune with `PREDICT_ELO_K` (0 freezes the static priors). The host bonus is treated as a positional edge — it enters `We` but the rating change accrues to the team's intrinsic rating.
 
 ### 2. Single-match model
 
@@ -117,7 +125,7 @@ The **projected bracket** needs more care. Choosing each slot's single most-like
 This is a teaching-grade model, not a betting market. Known limitations, roughly in order of impact:
 
 - **Sampling noise.** A probability `p` from N sims has standard error ≈ `√(p(1−p)/N)` — about ±0.8 percentage points at p=0.5, N=4,000 — shrinking only as `1/√N`. Small gaps between teams may be noise; raise `PREDICT_SIMS` to tighten.
-- **The ratings are subjective priors.** One hand-set snapshot, never re-estimated from in-tournament play (only results are fixed). This is the first thing to challenge.
+- **Ratings: subjective start, responsive update.** The pre-tournament snapshot is hand-set — challenge it freely. Ratings now adapt to results via a World-Cup-tier Elo update (`K=60`), which is deliberately responsive: over a handful of games it can overreact to a fluke result as readily as it captures real form. Lower `PREDICT_ELO_K` to damp it, or set 0 to freeze the priors.
 - **Simplified goal model.** Goals use Poisson with a Dixon–Coles low-score correction (`ρ = −0.12`) — better than independent Poisson on draws, but the correction is modest and still doesn't capture full game-state dynamics (red cards, game-management when ahead, late pushes). The total-goals baseline (2.7) and the linear, clamped Elo→supremacy mapping are convenient choices, not estimated fits.
 - **Thin knockout model.** A level match is decided by a single Elo coin — no separate extra-time phase, no penalty-specific skill.
 - **Coarse home advantage.** A flat +60 for all three hosts; no travel, altitude, climate, rest-day, injury, or squad-news effects.
@@ -170,6 +178,7 @@ All keys are **optional** — the dashboard renders fully from seeded data witho
 | `PUNDIT_MAX_PER_DAY` / `PUNDIT_MONTHLY_BUDGET` / `PUNDIT_RESERVE_PCT` | Pundit cost caps + reserve |
 | `PREDICT_SIMS` | Monte-Carlo sample count (default 4000) |
 | `PREDICT_DRAW_RHO` | Dixon–Coles draw correction (default −0.12; 0 disables) |
+| `PREDICT_ELO_K` | Dynamic-Elo update weight (default 60; 0 freezes priors) |
 
 ## Data & accuracy notes
 

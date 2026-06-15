@@ -47,3 +47,50 @@ def get_rating(team, host_match=False):
     if team in HOSTS:
         base += HOST_BONUS
     return base
+
+
+# ── dynamic (in-tournament) ratings ──────────────────────────────────────────
+# Update each team's base rating from its actual results so the projection
+# reflects current form, not just the pre-tournament snapshot. Standard
+# World-Football-Elo update applied match-by-match in chronological order:
+#
+#     R' = R + K · G · (W − We)
+#
+# with W the actual result (1/0.5/0), We the Elo win-expectancy, G a
+# goal-difference multiplier, and K the weight (60 = World-Cup tier). The host
+# bonus is treated as a positional edge: it enters the expectation We but the
+# rating change accrues to the team's intrinsic base.
+import config
+
+ELO_K = float(getattr(config, "PREDICT_ELO_K", 60.0))
+
+
+def _goal_mult(diff):
+    """eloratings.net goal-difference multiplier."""
+    if diff <= 1:
+        return 1.0
+    if diff == 2:
+        return 1.5
+    return (11 + diff) / 8.0
+
+
+def dynamic_ratings(finished, k=None):
+    """Replay finished matches (chronological order) and return adjusted base
+    ratings {team: rating}. `finished` rows expose team1/team2/score1/score2.
+    k=0 leaves the static priors untouched."""
+    k = ELO_K if k is None else k
+    rt = dict(ELO)
+    if not k:
+        return rt
+    for m in finished:
+        ta, tb, sa, sb = m["team1"], m["team2"], m["score1"], m["score2"]
+        if ta is None or tb is None or sa is None or sb is None:
+            continue
+        ra = rt.get(ta, DEFAULT_ELO) + (HOST_BONUS if ta in HOSTS else 0)
+        rb = rt.get(tb, DEFAULT_ELO) + (HOST_BONUS if tb in HOSTS else 0)
+        we_a = 1.0 / (1.0 + 10 ** (-(ra - rb) / 400.0))
+        w_a = 1.0 if sa > sb else 0.5 if sa == sb else 0.0
+        delta = k * _goal_mult(abs(sa - sb)) * (w_a - we_a)
+        rt[ta] = rt.get(ta, DEFAULT_ELO) + delta
+        rt[tb] = rt.get(tb, DEFAULT_ELO) - delta
+    return rt

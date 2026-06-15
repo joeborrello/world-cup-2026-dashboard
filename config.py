@@ -51,6 +51,11 @@ PREDICT_SIMS = int(os.environ.get('PREDICT_SIMS', '4000'))
 # 0 disables it (plain independent Poisson). See predict.DRAW_RHO.
 PREDICT_DRAW_RHO = float(os.environ.get('PREDICT_DRAW_RHO', '-0.12'))
 
+# Dynamic-Elo update weight. Ratings start at the ratings.py snapshot and adjust
+# from in-tournament results (R' = R + K·G·(W−We)). 60 = World-Cup tier (responsive);
+# 0 freezes ratings at the static priors. See ratings.dynamic_ratings.
+PREDICT_ELO_K = float(os.environ.get('PREDICT_ELO_K', '60'))
+
 # Optional: Anthropic key enables the MiroFish-inspired "AI pundit panel".
 # Statistical predictions work fully without it.
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')

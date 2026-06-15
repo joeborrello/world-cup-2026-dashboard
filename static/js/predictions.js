@@ -36,10 +36,34 @@
         `<div class="gnote">% chance to reach the Round of 32</div></div>`;
     }).join('');
 
+    renderForm(teams);
+
     // pundit scope options
     document.getElementById('punditScope').innerHTML =
       '<option value="knockout">Title race</option>' +
       Object.keys(groups).sort().map(g => `<option value="group:${g}">Group ${g}</option>`).join('');
+  }
+
+  // ── form tracker: biggest dynamic-Elo movers vs the pre-tournament prior ────
+  function renderForm(teams) {
+    const el = document.getElementById('formTrack');
+    if (!el) return;
+    const m = teams
+      .map(v => ({ team: v.team, code: v.code, elo: v.elo, delta: (v.elo || 0) - (v.elo_prior || 0) }))
+      .filter(v => Math.abs(v.delta) >= 1);
+    if (!m.length) {
+      el.innerHTML = '<p class="subtle">Ratings are still at their pre-tournament priors — ' +
+        'check back once more matches are played.</p>';
+      return;
+    }
+    const up = m.filter(v => v.delta > 0).sort((a, b) => b.delta - a.delta).slice(0, 6);
+    const down = m.filter(v => v.delta < 0).sort((a, b) => a.delta - b.delta).slice(0, 6);
+    const row = v => `<div class="ft-row"><span class="ft-t">${flag(v.code, v.team)}${v.team}</span>` +
+      `<span class="ft-d ${v.delta > 0 ? 'up' : 'down'}">${v.delta > 0 ? '▲' : '▼'} ` +
+      `${Math.abs(Math.round(v.delta))}</span><span class="ft-e">${Math.round(v.elo)}</span></div>`;
+    el.innerHTML =
+      `<div class="ft-col"><h3>Rising</h3>${up.map(row).join('') || '<p class="subtle">—</p>'}</div>` +
+      `<div class="ft-col"><h3>Falling</h3>${down.map(row).join('') || '<p class="subtle">—</p>'}</div>`;
   }
 
   // ── AI pundit panel ─────────────────────────────────────────────────────────

@@ -105,8 +105,8 @@ def _dc_cdf(la, lb, rho):
     return cells, cdf
 
 
-def _sim_scores(ta, tb):
-    la, lb = _lambdas(ratings.get_rating(ta), ratings.get_rating(tb))
+def _sim_scores(ta, tb, R):
+    la, lb = _lambdas(R[ta], R[tb])
     if not DRAW_RHO:
         return _poisson(la), _poisson(lb)        # plain independent Poisson
     cells, cdf = _dc_cdf(round(la, 4), round(lb, 4), DRAW_RHO)
@@ -114,14 +114,14 @@ def _sim_scores(ta, tb):
     return cells[i if i < len(cells) else -1]
 
 
-def _sim_winner(ta, tb):
-    sa, sb = _sim_scores(ta, tb)
+def _sim_winner(ta, tb, R):
+    sa, sb = _sim_scores(ta, tb, R)
     if sa > sb:
         return ta, tb
     if sb > sa:
         return tb, ta
     # knockout draw -> penalties, Elo-weighted coin
-    if random.random() < _we(ratings.get_rating(ta), ratings.get_rating(tb)):
+    if random.random() < _we(R[ta], R[tb]):
         return ta, tb
     return tb, ta
 
@@ -170,7 +170,7 @@ def _assign_thirds(third_slots, qualified_groups, team_of_group):
 
 
 # ── one simulation ───────────────────────────────────────────────────────────
-def _sim_once(group_fixtures, ko, third_slots):
+def _sim_once(group_fixtures, ko, third_slots, R):
     # 1) group standings
     table, played = {}, {}
     for gm in group_fixtures:
@@ -183,7 +183,7 @@ def _sim_once(group_fixtures, ko, third_slots):
         if gm["status"] == "finished":
             s1, s2 = gm["score1"], gm["score2"]
         else:
-            s1, s2 = _sim_scores(gm["team1"], gm["team2"])
+            s1, s2 = _sim_scores(gm["team1"], gm["team2"], R)
         compute._apply(table[g][gm["team1"]], s1, s2)
         compute._apply(table[g][gm["team2"]], s2, s1)
         played[g].append({"team1": gm["team1"], "team2": gm["team2"],
@@ -227,7 +227,7 @@ def _sim_once(group_fixtures, ko, third_slots):
             if not t1 or not t2:
                 results[num] = {"team1": t1, "team2": t2, "winner": None, "loser": None}
                 continue
-            w, l = _sim_winner(t1, t2)
+            w, l = _sim_winner(t1, t2, R)
         results[num] = {"team1": t1, "team2": t2, "winner": w, "loser": l}
 
     return standings, results
@@ -262,12 +262,25 @@ def _run(conn, sims):
     team_group = {gm["team1"]: gm["group"] for gm in group_fixtures}
     team_group.update({gm["team2"]: gm["group"] for gm in group_fixtures})
 
+    # Dynamic Elo: adjust the static priors by the finished results (in order),
+    # then add the host edge. `R` (effective ratings) drives every simulated
+    # match and the projected-bracket propagation, so the projection reflects
+    # in-tournament form rather than only the pre-tournament snapshot.
+    finished = conn.execute(
+        "SELECT team1, team2, score1, score2 FROM matches "
+        "WHERE status='finished' AND score1 IS NOT NULL "
+        "AND team1 IS NOT NULL AND team2 IS NOT NULL "
+        "ORDER BY utc_datetime, num").fetchall()
+    base = ratings.dynamic_ratings(finished)
+    R = {t: base.get(t, ratings.DEFAULT_ELO) + (ratings.HOST_BONUS if t in ratings.HOSTS else 0)
+         for t in team_group}
+
     rank_counts = {t: Counter() for t in team_group}      # team -> {rank: n}
     reach = {t: Counter() for t in team_group}            # team -> {round: n}
     slot_counts = {m["num"]: {"team1": Counter(), "team2": Counter()} for m in ko}
 
     for _ in range(sims):
-        standings, results = _sim_once(group_fixtures, ko, third_slots)
+        standings, results = _sim_once(group_fixtures, ko, third_slots, R)
         for rows in standings.values():
             for r in rows:
                 rank_counts[r["team"]][r["rank"]] += 1
@@ -293,7 +306,8 @@ def _run(conn, sims):
     for t, g in team_group.items():
         rc, rr = rank_counts[t], reach[t]
         teams_out[t] = {
-            "group": g, "elo": ratings.get_rating(t),
+            "group": g, "elo": round(R.get(t, ratings.DEFAULT_ELO)),
+            "elo_prior": round(ratings.get_rating(t)),
             "p_first": rc[1] / n, "p_second": rc[2] / n, "p_third": rc[3] / n,
             "advance": rr["r32"] / n, "r16": rr["r16"] / n, "qf": rr["qf"] / n,
             "sf": rr["sf"] / n, "final": rr["final"] / n, "champion": rr["champion"] / n,
@@ -358,7 +372,7 @@ def _run(conn, sims):
                 res[num] = {"team1": t1, "team2": t2, "winner": None, "loser": None}
                 continue
             # favored winner of the *projected* pairing advances (Elo == model pick)
-            w, l = (t1, t2) if ratings.get_rating(t1) >= ratings.get_rating(t2) else (t2, t1)
+            w, l = (t1, t2) if R.get(t1, 0) >= R.get(t2, 0) else (t2, t1)
         res[num] = {"team1": t1, "team2": t2, "winner": w, "loser": l}
 
     slots_out = {}

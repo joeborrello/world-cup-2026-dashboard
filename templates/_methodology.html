@@ -13,13 +13,22 @@
         so the assumptions are easy to see — and to argue with. Finished results are held fixed; only
         matches not yet played are simulated, so the numbers sharpen as the tournament unfolds.</p>
 
-      <h3>1 · Team strength (Elo priors)</h3>
-      <p>Every team carries a single rating on the <a href="https://en.wikipedia.org/wiki/World_Football_Elo_Ratings"
+      <h3>1 · Team strength (dynamic Elo)</h3>
+      <p>Every team starts from a prior rating on the <a href="https://en.wikipedia.org/wiki/World_Football_Elo_Ratings"
         target="_blank" rel="noopener">World-Football-Elo</a> scale (≈2100+ elite, ≈1900 strong,
-        ≈1750 mid, ≈1600 weaker), a roughly early-2026 snapshot. Co-hosts (USA, Canada, Mexico) get a
-        <b>+60</b> home-advantage bonus; unknown teams fall back to 1700. These are <i>static priors</i>:
-        the model never re-estimates a rating mid-tournament — instead it pins down actual results and
-        re-simulates the remainder, so a slightly-off prior self-corrects as games are played.</p>
+        ≈1750 mid, ≈1600 weaker) — a roughly early-2026 snapshot. Co-hosts (USA, Canada, Mexico) get a
+        <b>+60</b> home-advantage edge; unknown teams fall back to 1700.</p>
+      <p>Those priors then <b>update from in-tournament results</b>: after every finished match both
+        teams' ratings shift by the standard Elo update, so an over- or under-performing side carries
+        that form into the simulation of its remaining matches.</p>
+      <div class="formula">
+        R′ = R + K · G · (W − W<sub>e</sub>)
+      </div>
+      <p class="meth-note">W is the actual result (1 / 0.5 / 0), W<sub>e</sub> the Elo win-expectancy,
+        G a goal-margin multiplier (bigger wins move more), and K = <b>60</b> — the World-Cup tier,
+        deliberately responsive. Early on the ratings sit at their priors and diverge as results land;
+        the live movers are shown on the Predictions page's <i>Form tracker</i>. (Set
+        <code>PREDICT_ELO_K=0</code> to freeze the priors.)</p>
 
       <h3>2 · One match at a time</h3>
       <p><b>Goals (group stage).</b> A rating gap is turned into an expected-goals <i>supremacy</i>,
@@ -84,9 +93,11 @@
           about <span class="formula-inline">√(p(1−p)/N)</span> — ≈±0.8 percentage points at p=0.5,
           N=4,000. It shrinks only as 1/√N, so small gaps between teams may be noise. Raise
           <code>PREDICT_SIMS</code> to tighten.</li>
-        <li><b>The ratings are subjective priors.</b> One hand-set early-2026 snapshot; the model never
-          re-estimates them from in-tournament play (it only fixes results). Garbage in, garbage out —
-          this is the first thing to challenge.</li>
+        <li><b>Ratings: subjective start, responsive update.</b> The pre-tournament snapshot is
+          hand-set — challenge it freely. Ratings now adapt to results via a World-Cup-tier Elo update
+          (K=60), which is deliberately responsive: over a handful of games it can overreact to a fluke
+          result as readily as it captures real form. Lower <code>PREDICT_ELO_K</code> to damp it, or
+          set 0 to freeze the priors.</li>
         <li><b>Simplified goal model.</b> Goals use Poisson with a Dixon–Coles low-score correction
           (ρ = −0.12) — better than independent Poisson on draws, but the correction is modest and
           still doesn't capture full game-state dynamics (red cards, game-management when ahead, late
