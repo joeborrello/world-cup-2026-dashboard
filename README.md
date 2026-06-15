@@ -79,6 +79,16 @@ G_A ~ Poisson(λ_A)                  G_B ~ Poisson(λ_B)
 
 So ~200 Elo points ≈ one goal of expected supremacy, and evenly-matched teams average 1.35 goals each (2.7 combined, near the historical World-Cup norm). Modeling full scorelines — not just W/D/L — is what feeds the goal-difference and goals-scored tiebreakers.
 
+**Draw correction (Dixon–Coles).** Plain independent Poisson under-produces draws, so the four lowest scorelines are reweighted by the Dixon–Coles factor `τ` (with `ρ = −0.12`, set via `PREDICT_DRAW_RHO`), which nudges 0–0 and 1–1 up and 1–0/0–1 down:
+
+```
+τ(0,0) = 1 − λ_A·λ_B·ρ        τ(1,1) = 1 − ρ
+τ(1,0) = 1 + λ_B·ρ            τ(0,1) = 1 + λ_A·ρ        (τ = 1 otherwise)
+P(x,y) ∝ τ(x,y) · Poisson(x; λ_A) · Poisson(y; λ_B)
+```
+
+This lifts the average group-stage draw rate from ~22% to a more historical ~24% with negligible effect on title odds — its job is draw realism, not reshuffling the favorites. `ρ` is calibrated to the long-run ~24% norm rather than any single tournament's rate (real WC group stages swing ~18–30% on small samples, so a drawy run is treated as variance, not chased). Set `PREDICT_DRAW_RHO=0` to recover plain independent Poisson.
+
 **Knockout matches.** The same goal model decides the match; a level result goes to a single Elo-weighted coin flip standing in for a penalty shootout, using the standard Elo win-expectancy:
 
 ```
@@ -108,7 +118,7 @@ This is a teaching-grade model, not a betting market. Known limitations, roughly
 
 - **Sampling noise.** A probability `p` from N sims has standard error ≈ `√(p(1−p)/N)` — about ±0.8 percentage points at p=0.5, N=4,000 — shrinking only as `1/√N`. Small gaps between teams may be noise; raise `PREDICT_SIMS` to tighten.
 - **The ratings are subjective priors.** One hand-set snapshot, never re-estimated from in-tournament play (only results are fixed). This is the first thing to challenge.
-- **Independent-Poisson goals.** Real scorelines are correlated and game-state dependent (red cards, game-management when ahead, late pushes). A constant total-goals baseline (2.7) and a linear, clamped Elo→supremacy mapping are convenient approximations, not estimated fits.
+- **Simplified goal model.** Goals use Poisson with a Dixon–Coles low-score correction (`ρ = −0.12`) — better than independent Poisson on draws, but the correction is modest and still doesn't capture full game-state dynamics (red cards, game-management when ahead, late pushes). The total-goals baseline (2.7) and the linear, clamped Elo→supremacy mapping are convenient choices, not estimated fits.
 - **Thin knockout model.** A level match is decided by a single Elo coin — no separate extra-time phase, no penalty-specific skill.
 - **Coarse home advantage.** A flat +60 for all three hosts; no travel, altitude, climate, rest-day, injury, or squad-news effects.
 - **Third-place allocation is a *valid* matching, not FIFA's official fixed table.** The set of qualifying thirds is correct, but which slot each lands in may differ from FIFA's published lookup.
@@ -159,6 +169,7 @@ All keys are **optional** — the dashboard renders fully from seeded data witho
 | `PUNDIT_MODEL` | Pundit model (default `claude-opus-4-8`) |
 | `PUNDIT_MAX_PER_DAY` / `PUNDIT_MONTHLY_BUDGET` / `PUNDIT_RESERVE_PCT` | Pundit cost caps + reserve |
 | `PREDICT_SIMS` | Monte-Carlo sample count (default 4000) |
+| `PREDICT_DRAW_RHO` | Dixon–Coles draw correction (default −0.12; 0 disables) |
 
 ## Data & accuracy notes
 

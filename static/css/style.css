@@ -462,9 +462,12 @@ body.modal-open { overflow: hidden; }
 .modal-overlay {
   position: fixed; inset: 0; z-index: 1000;
   background: rgba(12, 24, 20, .55);
-  display: flex; align-items: flex-start; justify-content: center;
+  display: none; align-items: flex-start; justify-content: center;
   padding: 4vh 1rem; overflow-y: auto;
 }
+/* show only when not [hidden] — keeps the `hidden` attribute authoritative so
+   close (and the initial hidden state) actually work with a flex container */
+.modal-overlay:not([hidden]) { display: flex; }
 .modal-card {
   position: relative; background: var(--card); color: var(--ink);
   border-radius: 14px; box-shadow: 0 12px 40px rgba(0, 0, 0, .3);

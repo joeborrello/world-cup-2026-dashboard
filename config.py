@@ -47,6 +47,10 @@ OPENWEATHER_API_KEY = os.environ.get('OPENWEATHER_API_KEY', '')
 # Predictions: Monte-Carlo sample count (accuracy vs. compute time; cached).
 PREDICT_SIMS = int(os.environ.get('PREDICT_SIMS', '4000'))
 
+# Dixon-Coles low-score correction (draw realism). rho<0 lifts the draw rate;
+# 0 disables it (plain independent Poisson). See predict.DRAW_RHO.
+PREDICT_DRAW_RHO = float(os.environ.get('PREDICT_DRAW_RHO', '-0.12'))
+
 # Optional: Anthropic key enables the MiroFish-inspired "AI pundit panel".
 # Statistical predictions work fully without it.
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')

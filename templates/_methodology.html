@@ -32,6 +32,15 @@
       <p class="meth-note">So ~200 Elo points ≈ one goal of expected supremacy; evenly-matched teams
         average 1.35 goals each (2.7 combined, near the historical World-Cup norm). Scorelines — not
         just win/draw/loss — fall out of this, which is what the group tiebreakers need.</p>
+      <p><b>Draw correction (Dixon–Coles).</b> Plain independent Poisson under-produces draws, so the
+        four lowest scorelines are reweighted by the Dixon–Coles factor τ (with ρ = −0.12), nudging
+        0–0 and 1–1 up and 1–0 / 0–1 down. This lifts the average group draw rate from ~22% to a more
+        realistic ~24% without otherwise disturbing the goal model:</p>
+      <div class="formula">
+        τ(0,0) = 1 − λ<sub>A</sub>λ<sub>B</sub>ρ &nbsp;&nbsp; τ(1,1) = 1 − ρ<br>
+        τ(1,0) = 1 + λ<sub>B</sub>ρ &nbsp;&nbsp; τ(0,1) = 1 + λ<sub>A</sub>ρ &nbsp;&nbsp; (τ = 1 otherwise)<br>
+        P(x,y) ∝ τ(x,y) · Poisson(x; λ<sub>A</sub>) · Poisson(y; λ<sub>B</sub>)
+      </div>
       <p><b>Knockouts.</b> The same goal model decides the match; if it ends level, the tie goes to a
         single Elo-weighted coin flip standing in for a penalty shootout, using the standard Elo
         win-expectancy:</p>
@@ -78,9 +87,13 @@
         <li><b>The ratings are subjective priors.</b> One hand-set early-2026 snapshot; the model never
           re-estimates them from in-tournament play (it only fixes results). Garbage in, garbage out —
           this is the first thing to challenge.</li>
-        <li><b>Independent-Poisson goals.</b> Real scorelines are correlated and game-state dependent
-          (red cards, parking the bus when ahead, late pushes). A constant total-goals baseline (2.7)
-          and a linear, clamped Elo→supremacy mapping are convenient approximations, not estimated fits.</li>
+        <li><b>Simplified goal model.</b> Goals use Poisson with a Dixon–Coles low-score correction
+          (ρ = −0.12) — better than independent Poisson on draws, but the correction is modest and
+          still doesn't capture full game-state dynamics (red cards, game-management when ahead, late
+          pushes). The total-goals baseline (2.7) and the linear, clamped Elo→supremacy mapping are
+          convenient choices, not estimated fits. ρ is calibrated to the historical ~24% draw norm, so
+          an unusually drawy run (real tournaments swing roughly 18–30% on small samples) is treated as
+          variance, not chased.</li>
         <li><b>Thin knockout model.</b> A level match is decided by a single Elo coin — no separate
           extra-time phase, no penalty-specific skill.</li>
         <li><b>Home advantage is coarse.</b> A flat +60 for all three hosts; no travel, altitude,

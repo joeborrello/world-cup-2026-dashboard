@@ -15,18 +15,27 @@ the number of finished matches, so it only recomputes when results change.
 NOTE: read-only — never writes to the matches table (the 15-min cron owns that).
 """
 
+import bisect
 import math
 import random
 import re
 import threading
 from collections import Counter
 from datetime import datetime, timezone
+from functools import lru_cache
 
 import compute
 import config
 import ratings
 
 SIMS = getattr(config, "PREDICT_SIMS", 8000)
+
+# Dixon-Coles low-score dependence parameter. Independent Poisson under-produces
+# draws; this reweights the four lowest scorelines (0-0/1-1 up, 1-0/0-1 down) to
+# add the correlation real football shows. rho<0 lifts the draw rate; -0.12 takes
+# the average group-stage draw rate from ~22% to a more historical ~24%. Set
+# PREDICT_DRAW_RHO=0 to fall back to plain independent Poisson.
+DRAW_RHO = getattr(config, "PREDICT_DRAW_RHO", -0.12)
 
 GROUP_SLOT_RE = re.compile(r"^([12])([A-L])$")
 THIRD_SLOT_RE = re.compile(r"^3([A-L/]+)$")
@@ -57,9 +66,52 @@ def _we(ra, rb):
     return 1.0 / (1.0 + 10 ** (-(ra - rb) / 400.0))
 
 
+def _tau(x, y, la, lb, rho):
+    """Dixon-Coles correction factor for the four lowest-scoring cells."""
+    if x == 0 and y == 0:
+        return 1.0 - la * lb * rho
+    if x == 0 and y == 1:
+        return 1.0 + la * rho
+    if x == 1 and y == 0:
+        return 1.0 + lb * rho
+    if x == 1 and y == 1:
+        return 1.0 - rho
+    return 1.0
+
+
+_DC_MAXG = 11      # goals grid 0..10 per side (P(>10) is negligible)
+
+
+@lru_cache(maxsize=8192)
+def _dc_cdf(la, lb, rho):
+    """Cumulative scoreline distribution with the Dixon-Coles correction, as
+    (flat list of (x,y) cells, cumulative probabilities). Cached per rounded
+    (la, lb) pair so repeated identical matchups cost only a bisect."""
+    pa = [math.exp(-la) * la ** k / math.factorial(k) for k in range(_DC_MAXG)]
+    pb = [math.exp(-lb) * lb ** k / math.factorial(k) for k in range(_DC_MAXG)]
+    cells, probs, tot = [], [], 0.0
+    for x in range(_DC_MAXG):
+        for y in range(_DC_MAXG):
+            p = pa[x] * pb[y] * _tau(x, y, la, lb, rho)
+            if p < 0.0:
+                p = 0.0
+            cells.append((x, y))
+            probs.append(p)
+            tot += p
+    cdf, c = [], 0.0
+    for p in probs:
+        c += p / tot
+        cdf.append(c)
+    return cells, cdf
+
+
 def _sim_scores(ta, tb):
     la, lb = _lambdas(ratings.get_rating(ta), ratings.get_rating(tb))
-    return _poisson(la), _poisson(lb)
+    if not DRAW_RHO:
+        return _poisson(la), _poisson(lb)        # plain independent Poisson
+    cells, cdf = _dc_cdf(round(la, 4), round(lb, 4), DRAW_RHO)
+    i = bisect.bisect_left(cdf, random.random())
+    return cells[i if i < len(cells) else -1]
 
 
 def _sim_winner(ta, tb):
