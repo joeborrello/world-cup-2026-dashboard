@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}Map · World Cup 2026{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <h1>Daily match map</h1>
+  <p class="subtle">Scroll through the tournament — see <em>when and where</em> each game is played.</p>
+</section>
+
+<div class="day-controls">
+  <button id="prevDay" aria-label="Previous day">‹</button>
+  <div class="day-readout">
+    <input type="range" id="daySlider" min="0" max="0" value="0">
+    <div id="dayLabel" class="day-label">—</div>
+  </div>
+  <button id="nextDay" aria-label="Next day">›</button>
+</div>
+
+<div class="map-toolbar">
+  <div class="unit-toggle" id="unitToggle" role="group" aria-label="Temperature unit">
+    <button type="button" data-unit="F" class="active">°F</button>
+    <button type="button" data-unit="C">°C</button>
+  </div>
+  <div class="temp-legend" id="tempLegend" hidden>
+    <span class="tl-cap" id="tempCap">Air temp</span>
+    <span class="tl-scale"><span class="tl-bar"></span><span class="tl-ticks" id="tempTicks"></span></span>
+  </div>
+</div>
+
+<div class="live-layers" id="liveLayers" hidden>
+  <span class="ll-title">Live weather:</span>
+  <label><input type="checkbox" id="layRadar"> Radar</label>
+  <label id="layTempWrap"><input type="checkbox" id="layTemp"> Temp map</label>
+  <label id="layIsobarsWrap"><input type="checkbox" id="layIsobars"> Isobars</label>
+  <label><input type="checkbox" id="layAdvis"> Advisories</label>
+  <span class="ll-hint" id="liveHint"></span>
+</div>
+
+<div class="map-layout">
+  <div id="map"></div>
+  <aside id="dayPanel" class="day-panel">
+    <h3 id="panelDate">—</h3>
+    <ul id="matchList"></ul>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.WC = {
+    daysUrl: "{{ url_for('api_days') }}",
+    matchesUrl: "{{ url_for('api_matches') }}",
+    venuesUrl: "{{ url_for('api_venues') }}",
+    weatherUrl: "{{ url_for('api_weather') }}",
+    alertsUrl: "{{ url_for('api_alerts') }}",
+    owmKey: "{{ owm_key }}"
+  };
+</script>
+<script src="{{ url_for('static', filename='js/map.js') }}"></script>
+{% endblock %}

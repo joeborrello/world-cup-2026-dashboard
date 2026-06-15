@@ -1,0 +1,49 @@
+{% extends "base.html" %}
+{% block title %}Follow a team · World Cup 2026{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <h1>Follow your teams</h1>
+  <p class="subtle">Pick one or more teams to trace their path across North America. Each
+    match is pinned at its venue and tinted by date — earliest cool, latest warm — and a line
+    links each team's matches in order. Click a pin for kickoff time, stadium and score (times
+    in your local zone). Knockout venues join a team's path as those matchups are decided.</p>
+</section>
+
+<div class="team-bar">
+  <div class="date-legend" id="dateLegend"></div>
+  <div class="line-legend" id="lineLegend"></div>
+</div>
+
+<div class="sched-layout">
+  <div id="map"></div>
+  <aside class="sched-side">
+    <div class="tm-head">
+      <h3>Teams <span class="tm-count" id="tmCount"></span></h3>
+      <button type="button" id="teamClear" class="tm-btn">Clear</button>
+    </div>
+    <input type="search" id="teamSearch" class="tm-search" placeholder="Search teams…" autocomplete="off">
+    <div id="teamList" class="team-list"></div>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.WC = {
+    matchesUrl: "{{ url_for('api_matches') }}",
+    venuesUrl: "{{ url_for('api_venues') }}",
+    teamsUrl: "{{ url_for('api_teams') }}",
+    start: "{{ start }}",
+    end: "{{ end }}"
+  };
+</script>
+<script src="{{ url_for('static', filename='js/teammap.js') }}"></script>
+{% endblock %}

@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>World Cup 2026 Dashboard</title>
+<meta name="description" content="A live dashboard for the 2026 FIFA World Cup — bracket, group tables, interactive maps, match-day weather, a live score ticker, and an Elo prediction engine with an AI pundit panel.">
+<style>
+  :root{
+    --ink:#0d1b2a; --paper:#f7f5ef; --card:#ffffff; --line:#e4e0d6;
+    --green:#1f7a45; --green-d:#13522e; --gold:#e0a106; --red:#c8362f; --blue:#2a5fb0;
+    --muted:#5b6470;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--ink);background:var(--paper);-webkit-font-smoothing:antialiased}
+  a{color:var(--green-d)}
+  .wrap{max-width:1000px;margin:0 auto;padding:0 20px}
+
+  header.hero{
+    background:linear-gradient(135deg,var(--green-d),var(--green) 55%,#2a8c52);
+    color:#fff;padding:72px 0 60px;position:relative;overflow:hidden}
+  header.hero::after{content:"";position:absolute;inset:0;
+    background:radial-gradient(circle at 85% 20%,rgba(255,255,255,.12),transparent 40%);pointer-events:none}
+  .badge{display:inline-block;background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.3);
+    border-radius:999px;padding:5px 14px;font-size:13px;letter-spacing:.04em;text-transform:uppercase;margin-bottom:18px}
+  header.hero h1{margin:0 0 10px;font-size:clamp(34px,6vw,56px);line-height:1.05;letter-spacing:-.02em}
+  header.hero p.lead{margin:0 0 28px;font-size:clamp(17px,2.4vw,21px);max-width:680px;color:#eaf6ee}
+  .hosts{font-size:15px;color:#cfe9d8;margin-bottom:30px}
+  .cta{display:flex;gap:14px;flex-wrap:wrap}
+  .btn{display:inline-block;padding:13px 24px;border-radius:10px;font-weight:600;text-decoration:none;font-size:16px}
+  .btn-primary{background:var(--gold);color:#3a2a00;box-shadow:0 6px 18px rgba(0,0,0,.18)}
+  .btn-primary:hover{filter:brightness(1.05)}
+  .btn-ghost{background:rgba(255,255,255,.1);color:#fff;border:1px solid rgba(255,255,255,.45)}
+  .btn-ghost:hover{background:rgba(255,255,255,.18)}
+
+  section{padding:56px 0}
+  h2{font-size:clamp(24px,3.5vw,32px);margin:0 0 8px;letter-spacing:-.01em}
+  .section-sub{color:var(--muted);margin:0 0 32px;font-size:17px}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;
+    transition:transform .12s ease,box-shadow .12s ease}
+  .card:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(13,27,42,.08)}
+  .card .ico{font-size:26px;margin-bottom:10px}
+  .card h3{margin:0 0 6px;font-size:18px}
+  .card p{margin:0;color:var(--muted);font-size:15px}
+
+  .timeline{position:relative;margin-top:14px;border-left:3px solid var(--line);padding-left:26px}
+  .step{position:relative;padding:0 0 26px}
+  .step:last-child{padding-bottom:0}
+  .step::before{content:"";position:absolute;left:-35px;top:3px;width:15px;height:15px;border-radius:50%;
+    background:var(--green);border:3px solid var(--paper)}
+  .step .tag{font-size:12px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--green-d)}
+  .step h4{margin:2px 0 4px;font-size:17px}
+  .step p{margin:0;color:var(--muted);font-size:15px}
+
+  .stack{padding:48px 0;background:#fff;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+  .chips{display:flex;flex-wrap:wrap;gap:10px;margin-top:18px}
+  .chip{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:7px 13px;font-size:14px;font-weight:500}
+
+  footer{padding:40px 0;text-align:center;color:var(--muted);font-size:14px}
+  footer a{color:var(--green-d)}
+  .note{font-size:13px;color:var(--muted);max-width:680px;margin:18px auto 0;text-align:center}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="badge">⚽ 48 teams · 16 cities · 104 matches</span>
+    <h1>World Cup 2026 Dashboard</h1>
+    <p class="lead">Follow the 2026 FIFA World Cup in one place — a live bracket and group tables,
+      three interactive maps, match-day weather, a live score ticker, and an Elo prediction engine
+      with an AI pundit panel.</p>
+    <div class="hosts">🇨🇦 Canada &nbsp;·&nbsp; 🇺🇸 United States &nbsp;·&nbsp; 🇲🇽 Mexico &nbsp;—&nbsp; Jun 11 – Jul 19, 2026</div>
+    <div class="cta">
+      <a class="btn btn-primary" href="https://droplet.josephborrello.com/worldcup/">Open the live dashboard →</a>
+      <a class="btn btn-ghost" href="https://github.com/joeborrello/world-cup-2026-dashboard">View source on GitHub</a>
+    </div>
+  </div>
+</header>
+
+<section>
+  <div class="wrap">
+    <h2>What's inside</h2>
+    <p class="section-sub">Built with Flask + vanilla JS and Leaflet — no heavy front-end framework.</p>
+    <div class="grid">
+      <div class="card"><div class="ico">🗂️</div><h3>Live bracket</h3>
+        <p>Round of 32 → Final in FIFA's two-pathway layout, with feeder group tables alongside. Slots resolve as results land.</p></div>
+      <div class="card"><div class="ico">📊</div><h3>Group tables</h3>
+        <p>All 12 groups with live points, GF/GD and full FIFA tiebreakers — top-2 and in-contention thirds highlighted.</p></div>
+      <div class="card"><div class="ico">🗺️</div><h3>Daily map</h3>
+        <p>A day slider lights up each day's venues with country-flag pins and click-through match detail.</p></div>
+      <div class="card"><div class="ico">🧭</div><h3>Follow-a-team map</h3>
+        <p>Trace any team's journey with date-gradient pins, gradient path lines and directional arrows.</p></div>
+      <div class="card"><div class="ico">🌦️</div><h3>Match-day weather</h3>
+        <p>Live radar, isobars and advisories; temperature + precipitation forecasts; historical conditions for past games. °F/°C toggle and a national heat map.</p></div>
+      <div class="card"><div class="ico">🔴</div><h3>Live score ticker</h3>
+        <p>When a match is in progress, the live score shows up on every page.</p></div>
+      <div class="card"><div class="ico">🎲</div><h3>Prediction engine</h3>
+        <p>An Elo Monte-Carlo simulator projects title odds, qualification odds and a likely bracket — with a depth selector from R32 to the Final.</p></div>
+      <div class="card"><div class="ico">🎙️</div><h3>AI pundit panel</h3>
+        <p>A MiroFish-inspired panel of Claude personas debates the race, grounded in the model's numbers — with built-in cost controls.</p></div>
+    </div>
+  </div>
+</section>
+
+<section style="padding-top:8px">
+  <div class="wrap">
+    <h2>How it was built</h2>
+    <p class="section-sub">The dashboard grew in self-contained rounds, each shipped onto the live deployment.</p>
+    <div class="timeline">
+      <div class="step"><div class="tag">Stage 0 · Foundation</div><h4>Flask + SQLite skeleton</h4>
+        <p>Schedule, teams, groups and venues seeded from openfootball; a 15-minute cron pulls scores, recomputes standings and resolves the bracket. Bracket, groups and daily map go live.</p></div>
+      <div class="step"><div class="tag">Stage 1 · Live data</div><h4>football-data.org key</h4>
+        <p>Live score enrichment wired into the updater, keeping the keyless fallback intact.</p></div>
+      <div class="step"><div class="tag">Stage 2 · Maps</div><h4>Flag pins on the daily map</h4>
+        <p>Pins show the two competing nations' flags; time, stadium and stage on click.</p></div>
+      <div class="step"><div class="tag">Stage 3 · Maps</div><h4>Follow-a-team map</h4>
+        <p>Pick teams from a checklist and plot their matches, color-coded by date.</p></div>
+      <div class="step"><div class="tag">Stage 4 · Maps</div><h4>Team-map polish</h4>
+        <p>Gradient path lines, directional arrows and whole-pin date coloring.</p></div>
+      <div class="step"><div class="tag">Stage 5 · Weather</div><h4>Radar, isobars & advisories</h4>
+        <p>Live conditions for today's games, forecasts ahead, and historical weather for matches already played.</p></div>
+      <div class="step"><div class="tag">Stage 6 · Weather</div><h4>Temperature controls</h4>
+        <p>°F/°C toggle, a national temperature heat map, a numeric legend, plus humidity and dewpoint.</p></div>
+      <div class="step"><div class="tag">Stage 7 · Live</div><h4>Site-wide score ticker</h4>
+        <p>In-progress scores surface on every page.</p></div>
+      <div class="step"><div class="tag">Stage 8 · Predictions</div><h4>Elo Monte-Carlo engine</h4>
+        <p>Thousands of simulations project title odds and a likely bracket, with an Actual/Projected toggle and depth selector.</p></div>
+      <div class="step"><div class="tag">Stage 9 · AI</div><h4>MiroFish-inspired pundit panel</h4>
+        <p>Claude personas debate the race, grounded in the stats, with daily/monthly caps and a reserve to protect the shared key.</p></div>
+    </div>
+  </div>
+</section>
+
+<div class="stack">
+  <div class="wrap">
+    <h2>Tech stack</h2>
+    <p class="section-sub">Lightweight by design, running directly on a DigitalOcean droplet.</p>
+    <div class="chips">
+      <span class="chip">Python · Flask</span>
+      <span class="chip">SQLite</span>
+      <span class="chip">gunicorn + pm2</span>
+      <span class="chip">nginx subpath</span>
+      <span class="chip">Leaflet + OpenStreetMap</span>
+      <span class="chip">Vanilla JS</span>
+      <span class="chip">Open-Meteo · RainViewer · NWS</span>
+      <span class="chip">football-data.org</span>
+      <span class="chip">Anthropic Claude API</span>
+    </div>
+    <p class="note">Live scores via football-data.org (free tier, slightly delayed) with a keyless openfootball
+      fallback. Elo ratings are an early-2026 snapshot that self-corrects as real results are fixed.
+      AI pundit takes are model-grounded commentary — entertainment, not predictions of record.</p>
+  </div>
+</div>
+
+<footer>
+  <div class="wrap">
+    <p><a href="https://droplet.josephborrello.com/worldcup/">Live dashboard</a> ·
+       <a href="https://github.com/joeborrello/world-cup-2026-dashboard">Source</a> ·
+       Data from <a href="https://github.com/openfootball/worldcup.json">openfootball</a> ·
+       Maps © OpenStreetMap contributors</p>
+  </div>
+</footer>
+
+</body>
+</html>

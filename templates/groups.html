@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% block title %}Groups · World Cup 2026{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <h1>Group standings</h1>
+  <p class="subtle">Top 2 of each group advance, plus the 8 best 3rd-placed teams →
+    <a href="{{ url_for('bracket') }}">Round of 32</a></p>
+</section>
+
+<div class="legend">
+  <span class="dot adv"></span> advances directly (top 2)
+  <span class="dot third"></span> 3rd place — best 8 advance
+  <span class="dot out"></span> eliminated
+</div>
+
+<div class="groups-grid">
+  {% for letter, rows in groups.items() %}
+  <table class="group-table">
+    <caption>Group {{ letter }}</caption>
+    <thead>
+      <tr><th class="pos">#</th><th class="tname">Team</th>
+        <th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr class="{% if r.rank <= 2 %}adv{% elif r.rank == 3 %}third{% else %}out{% endif %}{% if r.qualified %} qualified{% endif %}">
+        <td class="pos">{{ r.rank }}</td>
+        <td class="tname"><span class="flag">{{ r.team | flag }}</span>{{ r.team }}{% if r.qualified %} <span class="check">✓</span>{% endif %}</td>
+        <td>{{ r.played }}</td><td>{{ r.win }}</td><td>{{ r.draw }}</td><td>{{ r.loss }}</td>
+        <td>{{ r.gf }}</td><td>{{ r.ga }}</td><td>{{ '%+d' % r.gd }}</td><td class="pts">{{ r.points }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% endfor %}
+</div>
+{% endblock %}

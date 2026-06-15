@@ -1,0 +1,23 @@
+# Secrets — never commit
+.env
+*.env
+
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+
+# Runtime artifacts
+*.log
+access.log
+error.log
+
+# Generated database (rebuilt by seed_data.py + update_results.py)
+data/*.db
+data/*.db-journal
+data/*.db-wal
+
+# OS / editor
+.DS_Store
+*.swp

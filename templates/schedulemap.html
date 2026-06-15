@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}All games · World Cup 2026{% endblock %}
+
+{% block head %}
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+      integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="">
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+        integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <h1>Every game, everywhere</h1>
+  <p class="subtle">All 104 matches across the 16 host cities at once. Each venue's ring is
+    split into one slice per match it hosts, colored by stage — so you can see at a glance
+    <em>when</em> every game happens and where the tournament heats up. Click a venue for its
+    full schedule (times in your local zone).</p>
+</section>
+
+<div class="sched-legend" id="schedLegend"></div>
+
+<div class="sched-layout">
+  <div id="map"></div>
+  <aside class="sched-side">
+    <h3>Filter by stage</h3>
+    <ul id="stageFilter" class="stage-filter"></ul>
+    <p class="subtle sched-tip">Toggle a stage to highlight only those matches on the map.</p>
+  </aside>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.WC = {
+    matchesUrl: "{{ url_for('api_matches') }}",
+    venuesUrl: "{{ url_for('api_venues') }}"
+  };
+</script>
+<script src="{{ url_for('static', filename='js/schedulemap.js') }}"></script>
+{% endblock %}

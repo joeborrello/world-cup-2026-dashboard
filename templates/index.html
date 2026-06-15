@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% from "macros.html" import match_card %}
+{% block title %}Today · World Cup 2026{% endblock %}
+
+{% block content %}
+<section class="hero">
+  {% if next_day %}
+    <h1>Next match day</h1>
+    <p class="subtle">No games today. Showing {{ next_day }}.</p>
+  {% else %}
+    <h1>Today's matches</h1>
+    <p class="subtle">{{ today }} · {{ n_finished }} of 104 matches played so far</p>
+  {% endif %}
+</section>
+
+{% if matches %}
+<div class="match-grid">
+  {% for m in matches %}{{ match_card(m) }}{% endfor %}
+</div>
+{% else %}
+<p class="empty">No upcoming matches found.</p>
+{% endif %}
+
+<section class="quicklinks">
+  <a class="card-link" href="{{ url_for('groups') }}"><h3>📊 Groups</h3><p>All 12 group standings, live.</p></a>
+  <a class="card-link" href="{{ url_for('bracket') }}"><h3>🏆 Bracket</h3><p>Round of 32 → Final, with feeder groups.</p></a>
+  <a class="card-link" href="{{ url_for('map_view') }}"><h3>🗺️ Map</h3><p>Scroll day-by-day: when & where every game is played.</p></a>
+</section>
+{% endblock %}

@@ -1,0 +1,26 @@
+{% macro side(team, resolved) -%}
+<span class="team {{ 'placeholder' if not resolved }}">
+  {%- if resolved %}<span class="flag">{{ team | flag }}</span>{% endif -%}
+  <span class="name">{{ team }}</span>
+</span>
+{%- endmacro %}
+
+{% macro match_card(m) -%}
+<div class="match {{ m.status }}" data-match="{{ m.num }}">
+  <div class="match-meta">
+    <span class="round">{{ m.group and 'Group ' ~ m.group or m.round }}</span>
+    <span class="time" data-utc="{{ m.utc_datetime }}" data-tz>{{ m.local_time or 'TBD' }}</span>
+  </div>
+  <div class="match-teams">
+    <div class="row">
+      {{ side(m.team1, m.team1_resolved) }}
+      <span class="score" data-score="1">{% if m.status == 'finished' %}{{ m.score1 }}{% endif %}</span>
+    </div>
+    <div class="row">
+      {{ side(m.team2, m.team2_resolved) }}
+      <span class="score" data-score="2">{% if m.status == 'finished' %}{{ m.score2 }}{% endif %}</span>
+    </div>
+  </div>
+  <div class="match-venue">📍 {{ m.stadium }}, {{ m.city }}</div>
+</div>
+{%- endmacro %}

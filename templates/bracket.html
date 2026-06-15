@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block title %}Bracket · World Cup 2026{% endblock %}
+
+{% macro bmatch(m, kind, side) -%}
+<div class="bmatch {{ m.status }}{{ ' is-third' if kind == 'third' }}"
+     id="m{{ m.num }}" data-side="{{ side }}"
+     {% if m.feeder_groups %}data-groups="{{ m.feeder_groups | join(',') }}"{% endif %}
+     {% if m.sources %}data-src="{{ m.sources | join(',') }}"{% endif %}
+     {% if kind == 'third' %}data-loss="1"{% endif %}>
+  <div class="bm-no">#{{ m.num }}</div>
+  <div class="bm-side {{ 'tbd' if not m.team1_resolved }}">
+    {% if m.team1_resolved %}{{ m.team1 | flag }}{% endif %}
+    <span class="name">{{ m.team1 }}</span>
+    <span class="score">{% if m.status == 'finished' %}{{ m.score1 }}{% endif %}</span>
+  </div>
+  <div class="bm-side {{ 'tbd' if not m.team2_resolved }}">
+    {% if m.team2_resolved %}{{ m.team2 | flag }}{% endif %}
+    <span class="name">{{ m.team2 }}</span>
+    <span class="score">{% if m.status == 'finished' %}{{ m.score2 }}{% endif %}</span>
+  </div>
+  <div class="bm-foot">
+    <span data-utc="{{ m.utc_datetime }}" data-fmt="datetime">{{ m.date }}</span>
+    · {{ m.city }}
+  </div>
+</div>
+{%- endmacro %}
+
+{% macro rail_group(entry, side) -%}
+<table class="mini-group rail-group" id="grp-{{ side }}-{{ entry.letter }}">
+  <caption>Group {{ entry.letter }}</caption>
+  {% for r in entry.rows %}
+  <tr class="{% if r.rank <= 2 %}adv{% elif r.rank == 3 %}third{% else %}out{% endif %}">
+    <td class="pos">{{ r.rank }}</td>
+    <td class="tname">{{ r.team | flag }}<span class="tn">{{ r.team }}</span></td>
+    <td class="pts">{{ r.points }}</td>
+  </tr>
+  {% endfor %}
+  <tfoot><tr><td colspan="3" class="feed-note">
+    <b>{{ 'Winner' if entry.place == '1' else 'Runner-up' }}</b> → match #{{ entry.target }}
+  </td></tr></tfoot>
+</table>
+{%- endmacro %}
+
+{% macro mcol(matches, label, side) -%}
+<div class="bcol" data-round="{{ label }}-{{ side }}">
+  <div class="bcol-head">{{ label }}</div>
+  {% for m in matches %}{{ bmatch(m, 'ko', side) }}{% endfor %}
+</div>
+{%- endmacro %}
+
+{% block content %}
+<section class="hero">
+  <h1>Knockout bracket</h1>
+  <p class="subtle">Both halves of the draw converge on the Final in the centre. The group
+    tables on each outer edge feed teams inward: dashed lines connect every group to the
+    Round-of-32 match its qualifiers go to. Slots show their placeholder (<code>1E</code> =
+    winner of Group E, <code>3A/B/C/D/F</code> = a best 3rd-placed team) until decided.</p>
+</section>
+
+<div class="bracket-toolbar">
+  <div class="bt-legend">
+    <span><i class="swatch adv"></i>Top 2 advance</span>
+    <span><i class="swatch third"></i>3rd place (best 8)</span>
+    <span><i class="line-key feed"></i>Feeds R32</span>
+    <span><i class="line-key win"></i>Advances</span>
+  </div>
+  <div class="bt-pred">
+    <div class="seg" id="predToggle">
+      <button type="button" data-pred="0" class="active">Actual</button>
+      <button type="button" data-pred="1">Projected</button>
+    </div>
+    <label class="depth-wrap">project to
+      <select id="depthSel" disabled>
+        <option value="r32">Round of 32</option>
+        <option value="r16">Round of 16</option>
+        <option value="qf">Quarter-finals</option>
+        <option value="sf">Semi-finals</option>
+        <option value="final" selected>Final</option>
+      </select>
+    </label>
+    <a class="pred-link" href="{{ url_for('predictions_page') }}">Full odds →</a>
+  </div>
+  <div class="bt-zoom">
+    <button id="zoomOut" aria-label="Zoom out">−</button>
+    <input type="range" id="zoomRange" min="30" max="140" value="50">
+    <button id="zoomIn" aria-label="Zoom in">+</button>
+    <button id="zoomFit" class="fit">Fit</button>
+  </div>
+</div>
+
+<div class="bracket-viewport" id="bviewport">
+  <div class="bracket-inner" id="binner">
+    <svg class="bracket-links" id="blinks" preserveAspectRatio="none"></svg>
+
+    <!-- LEFT half: groups → R32 → R16 → QF → SF -->
+    <div class="bcol rail" data-round="rail-l">
+      <div class="bcol-head">Groups</div>
+      {% for e in left_rail %}{{ rail_group(e, 'l') }}{% endfor %}
+    </div>
+    {{ mcol(left.r32, 'Round of 32', 'l') }}
+    {{ mcol(left.r16, 'Round of 16', 'l') }}
+    {{ mcol(left.qf, 'Quarter-finals', 'l') }}
+    {{ mcol(left.sf, 'Semi-finals', 'l') }}
+
+    <!-- CENTRE: Final + third place -->
+    <div class="bcol final-col" data-round="final">
+      <div class="bcol-head champ-head">🏆 Final</div>
+      {% for m in cols.final %}{{ bmatch(m, 'final', 'c') }}{% endfor %}
+      {% if cols.third %}
+      <div class="bcol-head third-head">Third place</div>
+      {% for m in cols.third %}{{ bmatch(m, 'third', 'c') }}{% endfor %}
+      {% endif %}
+    </div>
+
+    <!-- RIGHT half: SF ← QF ← R16 ← R32 ← groups -->
+    {{ mcol(right.sf, 'Semi-finals', 'r') }}
+    {{ mcol(right.qf, 'Quarter-finals', 'r') }}
+    {{ mcol(right.r16, 'Round of 16', 'r') }}
+    {{ mcol(right.r32, 'Round of 32', 'r') }}
+    <div class="bcol rail" data-round="rail-r">
+      <div class="bcol-head">Groups</div>
+      {% for e in right_rail %}{{ rail_group(e, 'r') }}{% endfor %}
+    </div>
+  </div>
+</div>
+<p class="bracket-hint subtle">Drag to pan · scroll or use the slider to zoom.</p>
+{% endblock %}
+
+{% block scripts %}
+<script>window.WC = { bracketPredUrl: "{{ url_for('api_bracket_predicted') }}" };</script>
+<script src="{{ url_for('static', filename='js/bracket.js') }}"></script>
+{% endblock %}

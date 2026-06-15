@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}World Cup 2026{% endblock %}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {% block head %}{% endblock %}
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="{{ url_for('index') }}">
+      <span class="ball">⚽</span> World Cup 2026
+      <span class="hosts">🇨🇦 🇺🇸 🇲🇽</span>
+    </a>
+    <nav>
+      {% set page = request.path %}
+      <a href="{{ url_for('index') }}" class="{{ 'active' if page == '/' }}">Today</a>
+      <a href="{{ url_for('groups') }}" class="{{ 'active' if page.endswith('/groups') }}">Groups</a>
+      <a href="{{ url_for('bracket') }}" class="{{ 'active' if page.endswith('/bracket') }}">Bracket</a>
+      <a href="{{ url_for('predictions_page') }}" class="{{ 'active' if page.endswith('/predictions') }}">Predictions</a>
+      <a href="{{ url_for('map_view') }}" class="{{ 'active' if page.endswith('/map') }}">Daily map</a>
+      <a href="{{ url_for('schedule_map') }}" class="{{ 'active' if page.endswith('/schedule-map') }}">All games</a>
+      <a href="{{ url_for('team_map') }}" class="{{ 'active' if page.endswith('/team-map') }}">Follow a team</a>
+    </nav>
+  </header>
+  <main>
+    <div id="liveTicker" class="live-ticker" hidden></div>
+    {% block content %}{% endblock %}
+  </main>
+  <footer>
+    <span>Jun 11 – Jul 19, 2026 · 48 teams · 16 cities · 104 matches · times shown in your local timezone</span>
+  </footer>
+  <script>window.WC_LIVE = "{{ url_for('api_live') }}";</script>
+  <script src="{{ url_for('static', filename='js/util.js') }}"></script>
+  <script src="{{ url_for('static', filename='js/live.js') }}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

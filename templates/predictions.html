@@ -1,0 +1,40 @@
+{% extends "base.html" %}
+{% block title %}Predictions · World Cup 2026{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <h1>Predictions</h1>
+  <p class="subtle">An Elo-based Monte-Carlo simulation plays out the rest of the tournament
+    thousands of times, holding finished results fixed — so the odds sharpen as matches are
+    played. <a href="{{ url_for('bracket') }}">See the projected bracket →</a></p>
+</section>
+
+<p class="pred-meta" id="predMeta">Simulating…</p>
+
+<h2>Title odds</h2>
+<div class="odds-wrap"><table class="odds-table" id="titleTable"></table></div>
+
+<h2>Group qualification</h2>
+<div class="group-odds" id="groupOdds"></div>
+
+<h2 class="pundit-h">AI pundit panel <span class="exp">experimental</span></h2>
+<p class="subtle">A <a href="https://github.com/666ghj/MiroFish" target="_blank" rel="noopener">MiroFish</a>-inspired
+  panel of opinionated AI pundits debates the race — grounded in the model's numbers above.</p>
+<div class="pundit-controls">
+  <select id="punditScope"></select>
+  <button type="button" id="punditGo" class="tm-btn">Generate</button>
+  <span class="pundit-budget" id="punditBudget"></span>
+</div>
+<div id="punditOut" class="pundit-out"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.WC = {
+    predUrl: "{{ url_for('api_predictions') }}",
+    punditUrl: "{{ url_for('api_pundits') }}",
+    budgetUrl: "{{ url_for('api_pundits_budget') }}"
+  };
+</script>
+<script src="{{ url_for('static', filename='js/predictions.js') }}"></script>
+{% endblock %}
