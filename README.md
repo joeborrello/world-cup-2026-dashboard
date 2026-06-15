@@ -59,6 +59,64 @@ A [MiroFish](https://github.com/666ghj/MiroFish)-inspired layer: four opinionate
 
 ---
 
+## Prediction methodology
+
+The bracket's **Projected** mode and the **Predictions** page are driven by a Monte-Carlo simulation that plays the rest of the tournament many thousands of times and tallies how often each outcome occurs. It's deliberately simple and transparent so the assumptions are easy to inspect — and to critique. Finished results are held fixed; only unplayed matches are simulated, so the numbers sharpen as the tournament unfolds. The implementation is pure-Python with no numerical dependencies: `predict.py` (simulation), `ratings.py` (priors), `compute.py` (standings + tiebreakers). *(This section mirrors the in-app "How the projections work" modal — keep the two in sync.)*
+
+### 1. Team strength (Elo priors)
+
+Each team carries a single rating on the [World-Football-Elo](https://en.wikipedia.org/wiki/World_Football_Elo_Ratings) scale (≈2100+ elite, ≈1900 strong, ≈1750 mid, ≈1600 weaker) — a hand-set, roughly early-2026 snapshot in `ratings.py`. Co-hosts (USA, Canada, Mexico) receive a flat **+60** home-advantage bonus; an unknown name falls back to 1700. These are *static priors*: the model never re-estimates a rating mid-tournament. Instead it pins down actual results and re-simulates the remainder, so a slightly-off prior self-corrects as games are played.
+
+### 2. Single-match model
+
+**Group-stage goals.** A rating gap becomes an expected-goals *supremacy* `s`; each side's goals are then drawn from independent Poisson distributions:
+
+```
+s   = clamp( (R_A − R_B) / 200, −2.5, +2.5 )
+λ_A = max( 0.18, (μ + s) / 2 )      λ_B = max( 0.18, (μ − s) / 2 )      μ = 2.7
+G_A ~ Poisson(λ_A)                  G_B ~ Poisson(λ_B)
+```
+
+So ~200 Elo points ≈ one goal of expected supremacy, and evenly-matched teams average 1.35 goals each (2.7 combined, near the historical World-Cup norm). Modeling full scorelines — not just W/D/L — is what feeds the goal-difference and goals-scored tiebreakers.
+
+**Knockout matches.** The same goal model decides the match; a level result goes to a single Elo-weighted coin flip standing in for a penalty shootout, using the standard Elo win-expectancy:
+
+```
+E_A = 1 / ( 1 + 10^( −(R_A − R_B) / 400 ) )
+```
+
+### 3. Simulating the whole tournament
+
+Each of **N** iterations (default **4,000**, via `PREDICT_SIMS`) plays out end-to-end:
+
+1. Simulate every unplayed **group** match; keep finished ones as-is.
+2. Build the 12 group tables with FIFA's tiebreakers in order: **points → goal difference → goals scored → head-to-head** (points/GD/GF among the tied teams) → team name as a stable final fallback (in lieu of fair-play points / drawing of lots). This ordering is shared with the live standings path (`compute.order_group`) so both apply identical rules.
+3. Rank the twelve 3rd-placed teams and take the **best 8**; assign them to the Round-of-32 `3X/Y` slots with a backtracking matcher that respects each slot's eligible groups.
+4. Resolve the Round of 32 and play each knockout round through to the Final, carrying winners forward (and the two semi-final losers into the third-place match).
+
+Across all iterations the model tallies how often each team finishes 1st/2nd/3rd in its group, reaches each round, and wins the title; dividing by N gives the probabilities. Results are cached and recomputed only when a new match result lands.
+
+### 4. From frequencies to the projected bracket
+
+The **odds tables** are these tallies directly (champion % = share of sims a team won the Final; advance % = share it reached the Round of 32, etc.).
+
+The **projected bracket** needs more care. Choosing each slot's single most-likely team *independently* does **not** produce a valid bracket — a dominant team can become the favorite in two mutually-exclusive places (e.g. both the Final and the third-place match, or two different Round-of-32 slots). The marginal mode of each slot is not a joint sample. Instead the engine assembles **one internally consistent bracket**: it derives a coherent Round-of-32 field from the simulated standings (each group's expected finishing order, plus the best-8 thirds matched to their slots), then advances the **favored team of each projected matchup** forward, so every later slot is fed by a real earlier result. The confidence shown on each slot remains the honest marginal — the fraction of simulations in which that exact team reached that exact slot.
+
+### 5. Uncertainty, assumptions & how to critique it
+
+This is a teaching-grade model, not a betting market. Known limitations, roughly in order of impact:
+
+- **Sampling noise.** A probability `p` from N sims has standard error ≈ `√(p(1−p)/N)` — about ±0.8 percentage points at p=0.5, N=4,000 — shrinking only as `1/√N`. Small gaps between teams may be noise; raise `PREDICT_SIMS` to tighten.
+- **The ratings are subjective priors.** One hand-set snapshot, never re-estimated from in-tournament play (only results are fixed). This is the first thing to challenge.
+- **Independent-Poisson goals.** Real scorelines are correlated and game-state dependent (red cards, game-management when ahead, late pushes). A constant total-goals baseline (2.7) and a linear, clamped Elo→supremacy mapping are convenient approximations, not estimated fits.
+- **Thin knockout model.** A level match is decided by a single Elo coin — no separate extra-time phase, no penalty-specific skill.
+- **Coarse home advantage.** A flat +60 for all three hosts; no travel, altitude, climate, rest-day, injury, or squad-news effects.
+- **Third-place allocation is a *valid* matching, not FIFA's official fixed table.** The set of qualifying thirds is correct, but which slot each lands in may differ from FIFA's published lookup.
+- **The projected bracket is the favored-path ("chalk") reconciliation.** Because the favorite advances each projected matchup, the single drawn bracket understates upsets — read the per-slot confidence and the odds tables for the true spread.
+- **Not yet back-tested.** The model hasn't been calibrated against historical tournaments, so treat absolute numbers as indicative rather than validated.
+
+Runs are deterministic given a fixed random seed, so any result above can be reproduced exactly for review.
+
 ## Architecture
 
 ```

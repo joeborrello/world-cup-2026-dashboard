@@ -1,0 +1,105 @@
+{# Shared "How the projections work" modal. Included on the Bracket and
+   Predictions pages; opened by any [data-modal-open="methodologyModal"] trigger
+   (wired generically in static/js/util.js). Keep this in sync with the
+   "Prediction methodology" section of README.md. #}
+<div class="modal-overlay" id="methodologyModal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="methTitle">
+    <button class="modal-close" data-modal-close type="button" aria-label="Close">&times;</button>
+    <div class="meth modal-body">
+      <h2 id="methTitle">How the projections work</h2>
+      <p class="meth-lead">The bracket's <b>Projected</b> mode and the <b>Predictions</b> page are
+        driven by a Monte-Carlo simulation that plays the rest of the tournament many thousands of
+        times and tallies how often each outcome occurs. It is deliberately simple and transparent
+        so the assumptions are easy to see — and to argue with. Finished results are held fixed; only
+        matches not yet played are simulated, so the numbers sharpen as the tournament unfolds.</p>
+
+      <h3>1 · Team strength (Elo priors)</h3>
+      <p>Every team carries a single rating on the <a href="https://en.wikipedia.org/wiki/World_Football_Elo_Ratings"
+        target="_blank" rel="noopener">World-Football-Elo</a> scale (≈2100+ elite, ≈1900 strong,
+        ≈1750 mid, ≈1600 weaker), a roughly early-2026 snapshot. Co-hosts (USA, Canada, Mexico) get a
+        <b>+60</b> home-advantage bonus; unknown teams fall back to 1700. These are <i>static priors</i>:
+        the model never re-estimates a rating mid-tournament — instead it pins down actual results and
+        re-simulates the remainder, so a slightly-off prior self-corrects as games are played.</p>
+
+      <h3>2 · One match at a time</h3>
+      <p><b>Goals (group stage).</b> A rating gap is turned into an expected-goals <i>supremacy</i>,
+        then each side's goals are drawn from independent Poisson distributions:</p>
+      <div class="formula">
+        s = clamp( (R<sub>A</sub> − R<sub>B</sub>) / 200, −2.5, +2.5 )<br>
+        λ<sub>A</sub> = max( 0.18, (μ + s) / 2 ) &nbsp;&nbsp; λ<sub>B</sub> = max( 0.18, (μ − s) / 2 ) &nbsp;&nbsp; with μ = 2.7<br>
+        G<sub>A</sub> ∼ Poisson(λ<sub>A</sub>) &nbsp;&nbsp; G<sub>B</sub> ∼ Poisson(λ<sub>B</sub>)
+      </div>
+      <p class="meth-note">So ~200 Elo points ≈ one goal of expected supremacy; evenly-matched teams
+        average 1.35 goals each (2.7 combined, near the historical World-Cup norm). Scorelines — not
+        just win/draw/loss — fall out of this, which is what the group tiebreakers need.</p>
+      <p><b>Knockouts.</b> The same goal model decides the match; if it ends level, the tie goes to a
+        single Elo-weighted coin flip standing in for a penalty shootout, using the standard Elo
+        win-expectancy:</p>
+      <div class="formula">E<sub>A</sub> = 1 / ( 1 + 10<sup>−(R<sub>A</sub> − R<sub>B</sub>) / 400</sup> )</div>
+
+      <h3>3 · Simulating the whole tournament</h3>
+      <p>Each of <b>N</b> iterations (default <b>4,000</b>) plays out end to end:</p>
+      <ol>
+        <li>Simulate every unplayed <b>group</b> match; keep finished ones as-is.</li>
+        <li>Build the 12 group tables with FIFA's tiebreakers in order — <b>points → goal difference →
+          goals scored → head-to-head</b> (points/GD/GF among the tied teams) → team name as a stable
+          final fallback (in lieu of fair-play points / drawing of lots).</li>
+        <li>Rank the twelve 3rd-placed teams and take the <b>best 8</b>; assign them to the
+          Round-of-32 "3X/Y" slots with a backtracking matcher that respects each slot's eligible
+          groups.</li>
+        <li>Resolve the Round of 32 and play each knockout round through to the Final, carrying winners
+          forward (and the two semi-final losers into the third-place match).</li>
+      </ol>
+      <p>Across all iterations the model tallies how often each team finishes 1st/2nd/3rd in its group,
+        reaches each round, and wins the title. Dividing by N gives the probabilities. Results are
+        cached and only recomputed when a new match result lands.</p>
+
+      <h3>4 · From frequencies to the bracket</h3>
+      <p>The <b>odds tables</b> are these tallies directly: e.g. <i>champion %</i> is the share of
+        simulations a team won the Final, <i>advance %</i> the share it reached the Round of 32.</p>
+      <p>The <b>Projected bracket</b> needs more care. Picking each slot's single most-likely team
+        <i>independently</i> does <b>not</b> yield a valid bracket — a dominant team can be the favorite
+        in two places that can't both happen (famously, the same team in both the Final and the
+        third-place match, or in two different Round-of-32 slots). Instead the model assembles
+        <b>one internally consistent bracket</b>: it derives a coherent Round-of-32 field from the
+        simulated standings (each group's expected finishing order, plus the best-8 thirds matched to
+        their slots), then advances the <b>favored team of each projected matchup</b> forward, so every
+        later slot is fed by a real earlier result. The confidence shown on a slot is still the honest
+        marginal — the share of simulations in which that exact team reached that exact slot.</p>
+
+      <h3>5 · Uncertainty, assumptions &amp; how to critique it</h3>
+      <p>This is a teaching-grade model, not a betting market. Known limitations, roughly in order of
+        impact:</p>
+      <ul class="meth-limits">
+        <li><b>Sampling noise.</b> A probability <i>p</i> from N simulations has a standard error of
+          about <span class="formula-inline">√(p(1−p)/N)</span> — ≈±0.8 percentage points at p=0.5,
+          N=4,000. It shrinks only as 1/√N, so small gaps between teams may be noise. Raise
+          <code>PREDICT_SIMS</code> to tighten.</li>
+        <li><b>The ratings are subjective priors.</b> One hand-set early-2026 snapshot; the model never
+          re-estimates them from in-tournament play (it only fixes results). Garbage in, garbage out —
+          this is the first thing to challenge.</li>
+        <li><b>Independent-Poisson goals.</b> Real scorelines are correlated and game-state dependent
+          (red cards, parking the bus when ahead, late pushes). A constant total-goals baseline (2.7)
+          and a linear, clamped Elo→supremacy mapping are convenient approximations, not estimated fits.</li>
+        <li><b>Thin knockout model.</b> A level match is decided by a single Elo coin — no separate
+          extra-time phase, no penalty-specific skill.</li>
+        <li><b>Home advantage is coarse.</b> A flat +60 for all three hosts; no travel, altitude,
+          climate, rest-day, injury, or squad-news effects at all.</li>
+        <li><b>Third-place allocation is a valid matching, not FIFA's official fixed table.</b> The set
+          of qualifying thirds is correct, but which slot each lands in can differ from FIFA's
+          published lookup.</li>
+        <li><b>The projected bracket is the favored-path ("chalk") reconciliation.</b> Because the
+          favorite advances each projected matchup, the single drawn bracket understates upsets — read
+          the per-slot confidence to see how shaky a pick is, and the odds tables for the true spread.</li>
+        <li><b>Not yet back-tested.</b> The model hasn't been calibrated against historical tournaments,
+          so treat the absolute numbers as indicative rather than validated.</li>
+      </ul>
+
+      <h3>6 · Reproducibility</h3>
+      <p>Pure-Python, no external numerical libraries. Runs are deterministic given a fixed random seed.
+        The full implementation lives in <code>predict.py</code> (simulation), <code>ratings.py</code>
+        (priors), and <code>compute.py</code> (standings &amp; tiebreakers) — and is documented in the
+        project README for line-by-line review.</p>
+    </div>
+  </div>
+</div>

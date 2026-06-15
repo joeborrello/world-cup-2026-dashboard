@@ -79,6 +79,8 @@
       </select>
     </label>
     <a class="pred-link" href="{{ url_for('predictions_page') }}">Full odds →</a>
+    <button type="button" class="meth-btn" data-modal-open="methodologyModal">
+      <span class="qm">?</span> How projections work</button>
   </div>
   <div class="bt-zoom">
     <button id="zoomOut" aria-label="Zoom out">−</button>
@@ -124,6 +126,7 @@
   </div>
 </div>
 <p class="bracket-hint subtle">Drag to pan · scroll or use the slider to zoom.</p>
+{% include "_methodology.html" %}
 {% endblock %}
 
 {% block scripts %}

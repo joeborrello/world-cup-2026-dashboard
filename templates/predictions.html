@@ -7,6 +7,8 @@
   <p class="subtle">An Elo-based Monte-Carlo simulation plays out the rest of the tournament
     thousands of times, holding finished results fixed — so the odds sharpen as matches are
     played. <a href="{{ url_for('bracket') }}">See the projected bracket →</a></p>
+  <button type="button" class="meth-btn" data-modal-open="methodologyModal">
+    <span class="qm">?</span> How these projections work</button>
 </section>
 
 <p class="pred-meta" id="predMeta">Simulating…</p>
@@ -26,6 +28,7 @@
   <span class="pundit-budget" id="punditBudget"></span>
 </div>
 <div id="punditOut" class="pundit-out"></div>
+{% include "_methodology.html" %}
 {% endblock %}
 
 {% block scripts %}

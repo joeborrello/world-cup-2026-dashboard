@@ -46,6 +46,36 @@ window.WCTime = (function () {
   return { tz: TZ, time, date, datetime, process };
 })();
 
+/* Generic modal: any [data-modal-open="ID"] opens #ID; clicking the backdrop,
+ * a [data-modal-close] control, or pressing Esc closes it. Body scroll locks
+ * while a modal is open. Used for the "How the projections work" methodology. */
+(function () {
+  function open(id) {
+    const m = document.getElementById(id);
+    if (!m) return;
+    m.hidden = false;
+    document.body.classList.add('modal-open');
+    const c = m.querySelector('[data-modal-close]');
+    if (c) c.focus();
+  }
+  function close(m) {
+    if (!m) return;
+    m.hidden = true;
+    document.body.classList.remove('modal-open');
+  }
+  document.addEventListener('click', function (e) {
+    const opener = e.target.closest('[data-modal-open]');
+    if (opener) { e.preventDefault(); open(opener.getAttribute('data-modal-open')); return; }
+    if (e.target.closest('[data-modal-close]')) { close(e.target.closest('.modal-overlay')); return; }
+    if (e.target.classList && e.target.classList.contains('modal-overlay')) { close(e.target); }
+  });
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape') {
+      document.querySelectorAll('.modal-overlay:not([hidden])').forEach(close);
+    }
+  });
+})();
+
 // flag image (matches the server-side flags.flag() output) for JS-built markup
 window.wcFlag = function (code, name) {
   if (!code) return '';

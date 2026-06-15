@@ -443,3 +443,64 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
 .pundit-budget .pb { background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: .15rem .45rem; }
 .pundit-budget .pb.over { color: #b3261e; border-color: #f0c2bd; background: #fdeceb; font-weight: 700; }
 .pundit-na.limited { color: #b3261e; background: #fdeceb; border: 1px solid #f0c2bd; }
+
+/* ── methodology modal ───────────────────────────────── */
+.meth-btn {
+  display: inline-flex; align-items: center; gap: .35rem;
+  background: var(--card); color: var(--green-dark);
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: .32rem .8rem; font-size: .85rem; font-weight: 600;
+  cursor: pointer; box-shadow: var(--shadow); white-space: nowrap;
+}
+.meth-btn:hover { border-color: var(--green); }
+.meth-btn .qm {
+  display: inline-grid; place-items: center; width: 1.05rem; height: 1.05rem;
+  border-radius: 50%; background: var(--green); color: #fff; font-size: .72rem; font-weight: 800;
+}
+
+body.modal-open { overflow: hidden; }
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 1000;
+  background: rgba(12, 24, 20, .55);
+  display: flex; align-items: flex-start; justify-content: center;
+  padding: 4vh 1rem; overflow-y: auto;
+}
+.modal-card {
+  position: relative; background: var(--card); color: var(--ink);
+  border-radius: 14px; box-shadow: 0 12px 40px rgba(0, 0, 0, .3);
+  max-width: 760px; width: 100%; margin: auto;
+}
+.modal-close {
+  position: absolute; top: .5rem; right: .6rem;
+  background: transparent; border: none; cursor: pointer;
+  font-size: 1.7rem; line-height: 1; color: var(--muted); padding: .1rem .35rem;
+}
+.modal-close:hover { color: var(--ink); }
+.modal-body { padding: 1.6rem 1.8rem 2rem; }
+
+.meth h2 { margin: 0 0 .3rem; font-size: 1.45rem; }
+.meth h3 {
+  margin: 1.5rem 0 .5rem; font-size: 1.05rem; color: var(--green-dark);
+  border-top: 1px solid var(--line); padding-top: 1rem;
+}
+.meth h3:first-of-type { border-top: none; padding-top: 0; }
+.meth p, .meth li { font-size: .92rem; line-height: 1.55; }
+.meth .meth-lead { font-size: .98rem; color: var(--ink); }
+.meth .meth-note { color: var(--muted); font-size: .86rem; }
+.meth ol, .meth ul { padding-left: 1.2rem; }
+.meth li { margin: .35rem 0; }
+.meth code {
+  background: var(--bg); border: 1px solid var(--line); border-radius: 4px;
+  padding: .05rem .3rem; font-size: .85em;
+}
+.meth .formula {
+  background: var(--bg); border: 1px solid var(--line); border-left: 3px solid var(--green);
+  border-radius: 8px; padding: .7rem .9rem; margin: .7rem 0;
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace; font-size: .9rem; line-height: 1.7;
+  overflow-x: auto;
+}
+.meth .formula-inline {
+  font-family: "SFMono-Regular", Menlo, Consolas, monospace;
+  background: var(--bg); border: 1px solid var(--line); border-radius: 4px; padding: .03rem .25rem;
+}
+.meth-limits li::marker { color: var(--gold); }
