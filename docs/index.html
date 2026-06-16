@@ -41,9 +41,9 @@
   .section-sub{color:var(--muted);margin:0 0 32px;font-size:17px}
 
   .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:18px}
-  .card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;
-    transition:transform .12s ease,box-shadow .12s ease}
-  .card:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(13,27,42,.08)}
+  .card{display:block;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px;
+    color:inherit;text-decoration:none;transition:transform .12s ease,box-shadow .12s ease}
+  .card:hover{transform:translateY(-3px);box-shadow:0 10px 26px rgba(13,27,42,.08);border-color:var(--green)}
   .card .ico{font-size:26px;margin-bottom:10px}
   .card h3{margin:0 0 6px;font-size:18px}
   .card p{margin:0;color:var(--muted);font-size:15px}
@@ -119,22 +119,22 @@
     <h2>What's inside</h2>
     <p class="section-sub">Built with Flask + vanilla JS and Leaflet — no heavy front-end framework.</p>
     <div class="grid">
-      <div class="card"><div class="ico">🗂️</div><h3>Live bracket</h3>
-        <p>Round of 32 → Final in FIFA's two-pathway layout, with feeder group tables alongside. Slots resolve as results land.</p></div>
-      <div class="card"><div class="ico">📊</div><h3>Group tables</h3>
-        <p>All 12 groups with live points, GF/GD and full FIFA tiebreakers — top-2 and in-contention thirds highlighted.</p></div>
-      <div class="card"><div class="ico">🗺️</div><h3>Daily map</h3>
-        <p>A day slider lights up each day's venues with country-flag pins and click-through match detail.</p></div>
-      <div class="card"><div class="ico">🧭</div><h3>Follow-a-team map</h3>
-        <p>Trace any team's journey with date-gradient pins, gradient path lines and directional arrows.</p></div>
-      <div class="card"><div class="ico">🌦️</div><h3>Match-day weather</h3>
-        <p>Live radar, isobars and advisories; temperature + precipitation forecasts; historical conditions for past games. °F/°C toggle and a national heat map.</p></div>
-      <div class="card"><div class="ico">🔴</div><h3>Live score ticker</h3>
-        <p>When a match is in progress, the live score shows up on every page.</p></div>
-      <div class="card"><div class="ico">🎲</div><h3>Prediction engine</h3>
-        <p>An Elo Monte-Carlo simulator projects title odds, qualification odds and a likely bracket — with a depth selector from R32 to the Final.</p></div>
-      <div class="card"><div class="ico">🎙️</div><h3>AI pundit panel</h3>
-        <p>A MiroFish-inspired panel of Claude personas debates the race, grounded in the model's numbers — with built-in cost controls.</p></div>
+      <a class="card" href="https://droplet.josephborrello.com/worldcup/bracket"><div class="ico">🗂️</div><h3>Live bracket</h3>
+        <p>Round of 32 → Final in FIFA's two-pathway layout, with feeder group tables alongside. Slots resolve as results land.</p></a>
+      <a class="card" href="https://droplet.josephborrello.com/worldcup/groups"><div class="ico">📊</div><h3>Group tables</h3>
+        <p>All 12 groups with live points, GF/GD and full FIFA tiebreakers — top-2 and in-contention thirds highlighted.</p></a>
+      <a class="card" href="https://droplet.josephborrello.com/worldcup/map"><div class="ico">🗺️</div><h3>Daily map</h3>
+        <p>A day slider lights up each day's venues with country-flag pins and click-through match detail.</p></a>
+      <a class="card" href="https://droplet.josephborrello.com/worldcup/team-map"><div class="ico">🧭</div><h3>Follow-a-team map</h3>
+        <p>Trace any team's journey with date-gradient pins, gradient path lines and directional arrows.</p></a>
+      <a class="card" href="https://droplet.josephborrello.com/worldcup/map"><div class="ico">🌦️</div><h3>Match-day weather</h3>
+        <p>Live radar, isobars and advisories; temperature + precipitation forecasts; historical conditions for past games. °F/°C toggle and a national heat map.</p></a>
+      <a class="card" href="https://droplet.josephborrello.com/worldcup/"><div class="ico">🔴</div><h3>Live score ticker</h3>
+        <p>When a match is in progress, the live score shows up on every page.</p></a>
+      <a class="card" href="https://droplet.josephborrello.com/worldcup/predictions"><div class="ico">🎲</div><h3>Prediction engine</h3>
+        <p>An Elo Monte-Carlo simulator projects title odds, qualification odds and a likely bracket — with a depth selector from R32 to the Final.</p></a>
+      <a class="card" href="https://droplet.josephborrello.com/worldcup/predictions"><div class="ico">🎙️</div><h3>AI pundit panel</h3>
+        <p>A MiroFish-inspired panel of Claude personas debates the race, grounded in the model's numbers — with built-in cost controls.</p></a>
     </div>
   </div>
 </section>
