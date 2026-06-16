@@ -79,9 +79,9 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
 .empty, .loading { color: var(--muted); }
 
 /* ── quick links ─────────────────────────────────────── */
-.quicklinks { display: grid; gap: .9rem; margin-top: 1.6rem;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); }
-.card-link { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
+.quicklinks { display: flex; flex-wrap: wrap; justify-content: center;
+  gap: .9rem; margin-top: 1.6rem; }
+.card-link { flex: 0 1 240px; background: var(--card); border: 1px solid var(--line); border-radius: 12px;
   padding: 1rem 1.1rem; text-decoration: none; color: var(--ink); box-shadow: var(--shadow); transition: transform .08s; }
 .card-link:hover { transform: translateY(-2px); border-color: var(--green); }
 .card-link h3 { margin: 0 0 .25rem; }
