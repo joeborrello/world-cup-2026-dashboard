@@ -16,7 +16,10 @@
 <section class="quicklinks">
   <a class="card-link" href="{{ url_for('groups') }}"><h3>📊 Groups</h3><p>All 12 group standings, live.</p></a>
   <a class="card-link" href="{{ url_for('bracket') }}"><h3>🏆 Bracket</h3><p>Round of 32 → Final, with feeder groups.</p></a>
-  <a class="card-link" href="{{ url_for('map_view') }}"><h3>🗺️ Map</h3><p>Scroll day-by-day: when & where every game is played.</p></a>
+  <a class="card-link" href="{{ url_for('predictions_page') }}"><h3>🔮 Predictions</h3><p>Title odds, qualification chances & a projected bracket.</p></a>
+  <a class="card-link" href="{{ url_for('map_view') }}"><h3>🗺️ Daily map</h3><p>Scroll day-by-day: when & where every game is played.</p></a>
+  <a class="card-link" href="{{ url_for('schedule_map') }}"><h3>📅 All games</h3><p>Every fixture mapped across the 16 host cities.</p></a>
+  <a class="card-link" href="{{ url_for('team_map') }}"><h3>🧭 Follow a team</h3><p>Trace one or more teams' journey across the map.</p></a>
 </section>
 {% endblock %}
 
