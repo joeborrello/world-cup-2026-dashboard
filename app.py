@@ -89,28 +89,16 @@ def _standings_by_group(conn):
 def index():
     conn = db.connect()
     venues = _venues_map(conn)
-    today = config.tournament_today().isoformat()
+    # Send the whole schedule; the page picks "today" (and the next match day) in
+    # the VIEWER's device timezone from each match's UTC kickoff, so the grouping
+    # matches their local calendar day rather than a server-chosen timezone.
     rows = conn.execute(
-        "SELECT * FROM matches WHERE date=? ORDER BY utc_datetime", (today,)
-    ).fetchall()
-    todays = [_match_dict(m, venues) for m in rows]
-    # if nothing today (e.g. a rest day), show the next match day
-    next_day = None
-    if not todays:
-        nd = conn.execute(
-            "SELECT MIN(date) d FROM matches WHERE date > ?", (today,)
-        ).fetchone()['d']
-        if nd:
-            rows = conn.execute(
-                "SELECT * FROM matches WHERE date=? ORDER BY utc_datetime", (nd,)
-            ).fetchall()
-            todays = [_match_dict(m, venues) for m in rows]
-            next_day = nd
+        "SELECT * FROM matches ORDER BY utc_datetime").fetchall()
+    matches = [_match_dict(m, venues) for m in rows]
     n_finished = conn.execute(
         "SELECT COUNT(*) FROM matches WHERE status='finished'").fetchone()[0]
     conn.close()
-    return render_template('index.html', matches=todays, today=today,
-                           next_day=next_day, n_finished=n_finished)
+    return render_template('index.html', matches=matches, n_finished=n_finished)
 
 
 @app.route('/groups')
