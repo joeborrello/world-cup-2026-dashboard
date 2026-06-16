@@ -93,8 +93,8 @@
     <span class="badge">⚽ 48 teams · 16 cities · 104 matches</span>
     <h1>World Cup 2026 Dashboard</h1>
     <p class="lead">Follow the 2026 FIFA World Cup in one place — a live bracket and group tables,
-      three interactive maps, match-day weather, a live score ticker, and an Elo prediction engine
-      with an AI pundit panel.</p>
+      three interactive maps, match-day weather, a live score ticker, and a form-aware Elo prediction
+      engine with an AI pundit panel — all shown in your device's local time.</p>
     <div class="hosts">🇨🇦 Canada &nbsp;·&nbsp; 🇺🇸 United States &nbsp;·&nbsp; 🇲🇽 Mexico &nbsp;—&nbsp; Jun 11 – Jul 19, 2026</div>
     <div class="cta">
       <a class="btn btn-primary" href="https://droplet.josephborrello.com/worldcup/">Open the live dashboard →</a>
@@ -132,7 +132,11 @@
       <a class="card" href="https://droplet.josephborrello.com/worldcup/"><div class="ico">🔴</div><h3>Live score ticker</h3>
         <p>When a match is in progress, the live score shows up on every page.</p></a>
       <a class="card" href="https://droplet.josephborrello.com/worldcup/predictions"><div class="ico">🎲</div><h3>Prediction engine</h3>
-        <p>An Elo Monte-Carlo simulator projects title odds, qualification odds and a likely bracket — with a depth selector from R32 to the Final.</p></a>
+        <p>An Elo Monte-Carlo simulator — with form-adjusting ratings and a Dixon–Coles draw model — projects title odds, qualification odds and a single consistent projected bracket, depth-selectable from R32 to the Final.</p></a>
+      <a class="card" href="https://droplet.josephborrello.com/worldcup/predictions"><div class="ico">📈</div><h3>Form tracker</h3>
+        <p>Team ratings start from a prior and adapt to in-tournament results — a live board of the biggest risers and fallers.</p></a>
+      <a class="card" href="https://droplet.josephborrello.com/worldcup/predictions"><div class="ico">📐</div><h3>Transparent methodology</h3>
+        <p>Every projection is explained: an in-app popup documents the Elo, Poisson goals, draw correction and Monte-Carlo — assumptions and limits included.</p></a>
       <a class="card" href="https://droplet.josephborrello.com/worldcup/predictions"><div class="ico">🎙️</div><h3>AI pundit panel</h3>
         <p>A MiroFish-inspired panel of Claude personas debates the race, grounded in the model's numbers — with built-in cost controls.</p></a>
     </div>
@@ -164,6 +168,12 @@
         <p>Thousands of simulations project title odds and a likely bracket, with an Actual/Projected toggle and depth selector.</p></div>
       <div class="step"><div class="tag">Stage 9 · AI</div><h4>MiroFish-inspired pundit panel</h4>
         <p>Claude personas debate the race, grounded in the stats, with daily/monthly caps and a reserve to protect the shared key.</p></div>
+      <div class="step"><div class="tag">Stage 10 · Rigor</div><h4>Consistent bracket &amp; open methodology</h4>
+        <p>The projected bracket became internally consistent — no team in two places at once — with a popup documenting the whole model for review.</p></div>
+      <div class="step"><div class="tag">Stage 11 · Predictions</div><h4>Calibrated, living ratings</h4>
+        <p>A Dixon–Coles draw correction for realism, and dynamic Elo that adapts to results — surfaced as a Form tracker of risers and fallers.</p></div>
+      <div class="step"><div class="tag">Stage 12 · Polish</div><h4>Local time for every visitor</h4>
+        <p>Kickoff times and the "today" schedule now follow each device's own timezone.</p></div>
     </div>
   </div>
 </section>
@@ -184,7 +194,7 @@
       <span class="chip">Anthropic Claude API</span>
     </div>
     <p class="note">Live scores via football-data.org (free tier, slightly delayed) with a keyless openfootball
-      fallback. Elo ratings are an early-2026 snapshot that self-corrects as real results are fixed.
+      fallback. Elo ratings start from an early-2026 snapshot and update from in-tournament results.
       AI pundit takes are model-grounded commentary — entertainment, not predictions of record.</p>
   </div>
 </div>
