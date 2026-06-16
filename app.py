@@ -89,7 +89,7 @@ def _standings_by_group(conn):
 def index():
     conn = db.connect()
     venues = _venues_map(conn)
-    today = date.today().isoformat()
+    today = config.tournament_today().isoformat()
     rows = conn.execute(
         "SELECT * FROM matches WHERE date=? ORDER BY utc_datetime", (today,)
     ).fetchall()

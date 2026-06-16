@@ -16,6 +16,7 @@ import os
 import subprocess
 from datetime import date, datetime, timezone
 
+import config
 import db
 import live
 import predict
@@ -37,7 +38,7 @@ def _phase(conn):
 
 
 def _today(conn):
-    today = date.today().isoformat()
+    today = config.tournament_today().isoformat()
     rows = conn.execute(
         "SELECT * FROM matches WHERE date=? ORDER BY utc_datetime", (today,)).fetchall()
     # overlay live (in-play / paused) scores keyed by match number

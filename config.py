@@ -78,3 +78,20 @@ SUBPATH = '/worldcup'
 # Tournament span (for the map day slider)
 TOURNAMENT_START = '2026-06-11'
 TOURNAMENT_END = '2026-07-19'
+
+# "Today" reference timezone. Match `date` values are venue-local, and the server
+# runs in UTC, so using the server date rolls the schedule over to the next day at
+# UTC midnight — while West-Coast games of the current matchday are still to play.
+# Anchor "today" to the westmost host timezone (US Pacific) so the day only advances
+# once even the latest North-American matchday has passed.
+from datetime import datetime as _datetime, timezone as _timezone, timedelta as _timedelta
+try:
+    from zoneinfo import ZoneInfo as _ZoneInfo
+    _TODAY_TZ = _ZoneInfo(os.environ.get('TOURNAMENT_TZ', 'America/Los_Angeles'))
+except Exception:                       # no tzdata -> fixed PDT (tournament is Jun-Jul)
+    _TODAY_TZ = _timezone(_timedelta(hours=-7))
+
+
+def tournament_today():
+    """Current date in the tournament reference timezone (a datetime.date)."""
+    return _datetime.now(_TODAY_TZ).date()

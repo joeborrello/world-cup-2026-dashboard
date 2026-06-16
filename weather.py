@@ -18,6 +18,7 @@ from datetime import date as _date, datetime, timedelta, timezone
 
 import requests
 
+import config
 import db
 
 FORECAST_URL = "https://api.open-meteo.com/v1/forecast"
@@ -55,7 +56,7 @@ def _ensure_cache(conn):
 
 def _days_ahead(date_str):
     d = datetime.strptime(date_str, "%Y-%m-%d").date()
-    return (d - _date.today()).days
+    return (d - config.tournament_today()).days
 
 
 def _fetch_hourly(lat, lng, start_date, end_date):
