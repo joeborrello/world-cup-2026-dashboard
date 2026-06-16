@@ -24,11 +24,11 @@ module.exports = {
       autorestart: false,
     },
     {
-      // Publish a small live-data snapshot to docs/data/live.json and push it
-      // to GitHub so the Pages landing site stays current. Runs a few minutes
-      // behind the updater; only commits when the content actually changed.
+      // Rebuild the self-contained static site (pages + JSON data + assets) and
+      // the landing live-strip, then push to GitHub Pages. Runs a few minutes
+      // behind the updater; only commits when something actually changed.
       name: 'worldcup-2026-pages',
-      script: '/var/www/worldcup-2026/publish_pages.py',
+      script: '/var/www/worldcup-2026/build_static.py',
       interpreter: '/var/www/worldcup-2026/venv/bin/python',
       cwd: '/var/www/worldcup-2026',
       cron_restart: '3,18,33,48 * * * *',

@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <base href="/world-cup-2026-dashboard/">
+  <!-- static build: github.io serves this; data lives in /data -->
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Groups · World Cup 2026</title>
+  <link rel="icon" type="image/svg+xml" href="appstatic/favicon.svg">
+  <link rel="stylesheet" href="appstatic/css/style.css">
+  
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="today/">
+      <span class="ball">⚽</span> World Cup 2026
+      <span class="hosts">🇨🇦 🇺🇸 🇲🇽</span>
+    </a>
+    <nav>
+      
+      <a href="today/" class="">Today</a>
+      <a href="groups/" class="active">Groups</a>
+      <a href="bracket/" class="">Bracket</a>
+      <a href="predictions/" class="">Predictions</a>
+      <a href="https://droplet.josephborrello.com/worldcup/map" class="">Daily map</a>
+      <a href="schedule-map/" class="">All games</a>
+      <a href="team-map/" class="">Follow a team</a>
+    </nav>
+  </header>
+  <main>
+    <div id="liveTicker" class="live-ticker" hidden></div>
+    
+<section class="hero">
+  <h1>Group standings</h1>
+  <p class="subtle">Top 2 of each group advance, plus the 8 best 3rd-placed teams →
+    <a href="bracket/">Round of 32</a></p>
+</section>
+
+<div class="legend">
+  <span class="dot adv"></span> advances directly (top 2)
+  <span class="dot third"></span> 3rd place — best 8 advance
+  <span class="dot out"></span> eliminated
+</div>
+
+<div class="groups-grid">
+  
+  <table class="group-table">
+    <caption>Group A</caption>
+    <thead>
+      <tr><th class="pos">#</th><th class="tname">Team</th>
+        <th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr>
+    </thead>
+    <tbody>
+      
+      <tr class="adv">
+        <td class="pos">1</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/mx.svg" alt="Mexico" title="Mexico" loading="lazy" width="22" height="16"></span>Mexico</td>
+        <td>1</td><td>1</td><td>0</td><td>0</td>
+        <td>2</td><td>0</td><td>+2</td><td class="pts">3</td>
+      </tr>
+      
+      <tr class="adv">
+        <td class="pos">2</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/kr.svg" alt="South Korea" title="South Korea" loading="lazy" width="22" height="16"></span>South Korea</td>
+        <td>1</td><td>1</td><td>0</td><td>0</td>
+        <td>2</td><td>1</td><td>+1</td><td class="pts">3</td>
+      </tr>
+      
+      <tr class="third">
+        <td class="pos">3</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/cz.svg" alt="Czech Republic" title="Czech Republic" loading="lazy" width="22" height="16"></span>Czech Republic</td>
+        <td>1</td><td>0</td><td>0</td><td>1</td>
+        <td>1</td><td>2</td><td>-1</td><td class="pts">0</td>
+      </tr>
+      
+      <tr class="out">
+        <td class="pos">4</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/za.svg" alt="South Africa" title="South Africa" loading="lazy" width="22" height="16"></span>South Africa</td>
+        <td>1</td><td>0</td><td>0</td><td>1</td>
+        <td>0</td><td>2</td><td>-2</td><td class="pts">0</td>
+      </tr>
+      
+    </tbody>
+  </table>
+  
+  <table class="group-table">
+    <caption>Group B</caption>
+    <thead>
+      <tr><th class="pos">#</th><th class="tname">Team</th>
+        <th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr>
+    </thead>
+    <tbody>
+      
+      <tr class="adv">
+        <td class="pos">1</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/ba.svg" alt="Bosnia &amp; Herzegovina" title="Bosnia &amp; Herzegovina" loading="lazy" width="22" height="16"></span>Bosnia &amp; Herzegovina</td>
+        <td>1</td><td>0</td><td>1</td><td>0</td>
+        <td>1</td><td>1</td><td>+0</td><td class="pts">1</td>
+      </tr>
+      
+      <tr class="adv">
+        <td class="pos">2</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/ca.svg" alt="Canada" title="Canada" loading="lazy" width="22" height="16"></span>Canada</td>
+        <td>1</td><td>0</td><td>1</td><td>0</td>
+        <td>1</td><td>1</td><td>+0</td><td class="pts">1</td>
+      </tr>
+      
+      <tr class="third">
+        <td class="pos">3</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/qa.svg" alt="Qatar" title="Qatar" loading="lazy" width="22" height="16"></span>Qatar</td>
+        <td>1</td><td>0</td><td>1</td><td>0</td>
+        <td>1</td><td>1</td><td>+0</td><td class="pts">1</td>
+      </tr>
+      
+      <tr class="out">
+        <td class="pos">4</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/ch.svg" alt="Switzerland" title="Switzerland" loading="lazy" width="22" height="16"></span>Switzerland</td>
+        <td>1</td><td>0</td><td>1</td><td>0</td>
+        <td>1</td><td>1</td><td>+0</td><td class="pts">1</td>
+      </tr>
+      
+    </tbody>
+  </table>
+  
+  <table class="group-table">
+    <caption>Group C</caption>
+    <thead>
+      <tr><th class="pos">#</th><th class="tname">Team</th>
+        <th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr>
+    </thead>
+    <tbody>
+      
+      <tr class="adv">
+        <td class="pos">1</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/gb-sct.svg" alt="Scotland" title="Scotland" loading="lazy" width="22" height="16"></span>Scotland</td>
+        <td>1</td><td>1</td><td>0</td><td>0</td>
+        <td>1</td><td>0</td><td>+1</td><td class="pts">3</td>
+      </tr>
+      
+      <tr class="adv">
+        <td class="pos">2</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/br.svg" alt="Brazil" title="Brazil" loading="lazy" width="22" height="16"></span>Brazil</td>
+        <td>1</td><td>0</td><td>1</td><td>0</td>
+        <td>1</td><td>1</td><td>+0</td><td class="pts">1</td>
+      </tr>
+      
+      <tr class="third">
+        <td class="pos">3</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/ma.svg" alt="Morocco" title="Morocco" loading="lazy" width="22" height="16"></span>Morocco</td>
+        <td>1</td><td>0</td><td>1</td><td>0</td>
+        <td>1</td><td>1</td><td>+0</td><td class="pts">1</td>
+      </tr>
+      
+      <tr class="out">
+        <td class="pos">4</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/ht.svg" alt="Haiti" title="Haiti" loading="lazy" width="22" height="16"></span>Haiti</td>
+        <td>1</td><td>0</td><td>0</td><td>1</td>
+        <td>0</td><td>1</td><td>-1</td><td class="pts">0</td>
+      </tr>
+      
+    </tbody>
+  </table>
+  
+  <table class="group-table">
+    <caption>Group D</caption>
+    <thead>
+      <tr><th class="pos">#</th><th class="tname">Team</th>
+        <th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr>
+    </thead>
+    <tbody>
+      
+      <tr class="adv">
+        <td class="pos">1</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/us.svg" alt="USA" title="USA" loading="lazy" width="22" height="16"></span>USA</td>
+        <td>1</td><td>1</td><td>0</td><td>0</td>
+        <td>4</td><td>1</td><td>+3</td><td class="pts">3</td>
+      </tr>
+      
+      <tr class="adv">
+        <td class="pos">2</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/au.svg" alt="Australia" title="Australia" loading="lazy" width="22" height="16"></span>Australia</td>
+        <td>1</td><td>1</td><td>0</td><td>0</td>
+        <td>2</td><td>0</td><td>+2</td><td class="pts">3</td>
+      </tr>
+      
+      <tr class="third">
+        <td class="pos">3</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/tr.svg" alt="Turkey" title="Turkey" loading="lazy" width="22" height="16"></span>Turkey</td>
+        <td>1</td><td>0</td><td>0</td><td>1</td>
+        <td>0</td><td>2</td><td>-2</td><td class="pts">0</td>
+      </tr>
+      
+      <tr class="out">
+        <td class="pos">4</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/py.svg" alt="Paraguay" title="Paraguay" loading="lazy" width="22" height="16"></span>Paraguay</td>
+        <td>1</td><td>0</td><td>0</td><td>1</td>
+        <td>1</td><td>4</td><td>-3</td><td class="pts">0</td>
+      </tr>
+      
+    </tbody>
+  </table>
+  
+  <table class="group-table">
+    <caption>Group E</caption>
+    <thead>
+      <tr><th class="pos">#</th><th class="tname">Team</th>
+        <th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr>
+    </thead>
+    <tbody>
+      
+      <tr class="adv">
+        <td class="pos">1</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/de.svg" alt="Germany" title="Germany" loading="lazy" width="22" height="16"></span>Germany</td>
+        <td>1</td><td>1</td><td>0</td><td>0</td>
+        <td>7</td><td>1</td><td>+6</td><td class="pts">3</td>
+      </tr>
+      
+      <tr class="adv">
+        <td class="pos">2</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/ci.svg" alt="Ivory Coast" title="Ivory Coast" loading="lazy" width="22" height="16"></span>Ivory Coast</td>
+        <td>1</td><td>1</td><td>0</td><td>0</td>
+        <td>1</td><td>0</td><td>+1</td><td class="pts">3</td>
+      </tr>
+      
+      <tr class="third">
+        <td class="pos">3</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/ec.svg" alt="Ecuador" title="Ecuador" loading="lazy" width="22" height="16"></span>Ecuador</td>
+        <td>1</td><td>0</td><td>0</td><td>1</td>
+        <td>0</td><td>1</td><td>-1</td><td class="pts">0</td>
+      </tr>
+      
+      <tr class="out">
+        <td class="pos">4</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/cw.svg" alt="Curaçao" title="Curaçao" loading="lazy" width="22" height="16"></span>Curaçao</td>
+        <td>1</td><td>0</td><td>0</td><td>1</td>
+        <td>1</td><td>7</td><td>-6</td><td class="pts">0</td>
+      </tr>
+      
+    </tbody>
+  </table>
+  
+  <table class="group-table">
+    <caption>Group F</caption>
+    <thead>
+      <tr><th class="pos">#</th><th class="tname">Team</th>
+        <th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr>
+    </thead>
+    <tbody>
+      
+      <tr class="adv">
+        <td class="pos">1</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/se.svg" alt="Sweden" title="Sweden" loading="lazy" width="22" height="16"></span>Sweden</td>
+        <td>1</td><td>1</td><td>0</td><td>0</td>
+        <td>5</td><td>1</td><td>+4</td><td class="pts">3</td>
+      </tr>
+      
+      <tr class="adv">
+        <td class="pos">2</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/jp.svg" alt="Japan" title="Japan" loading="lazy" width="22" height="16"></span>Japan</td>
+        <td>1</td><td>0</td><td>1</td><td>0</td>
+        <td>2</td><td>2</td><td>+0</td><td class="pts">1</td>
+      </tr>
+      
+      <tr class="third">
+        <td class="pos">3</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/nl.svg" alt="Netherlands" title="Netherlands" loading="lazy" width="22" height="16"></span>Netherlands</td>
+        <td>1</td><td>0</td><td>1</td><td>0</td>
+        <td>2</td><td>2</td><td>+0</td><td class="pts">1</td>
+      </tr>
+      
+      <tr class="out">
+        <td class="pos">4</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/tn.svg" alt="Tunisia" title="Tunisia" loading="lazy" width="22" height="16"></span>Tunisia</td>
+        <td>1</td><td>0</td><td>0</td><td>1</td>
+        <td>1</td><td>5</td><td>-4</td><td class="pts">0</td>
+      </tr>
+      
+    </tbody>
+  </table>
+  
+  <table class="group-table">
+    <caption>Group G</caption>
+    <thead>
+      <tr><th class="pos">#</th><th class="tname">Team</th>
+        <th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr>
+    </thead>
+    <tbody>
+      
+      <tr class="adv">
+        <td class="pos">1</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/be.svg" alt="Belgium" title="Belgium" loading="lazy" width="22" height="16"></span>Belgium</td>
+        <td>1</td><td>0</td><td>1</td><td>0</td>
+        <td>1</td><td>1</td><td>+0</td><td class="pts">1</td>
+      </tr>
+      
+      <tr class="adv">
+        <td class="pos">2</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/eg.svg" alt="Egypt" title="Egypt" loading="lazy" width="22" height="16"></span>Egypt</td>
+        <td>1</td><td>0</td><td>1</td><td>0</td>
+        <td>1</td><td>1</td><td>+0</td><td class="pts">1</td>
+      </tr>
+      
+      <tr class="third">
+        <td class="pos">3</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/ir.svg" alt="Iran" title="Iran" loading="lazy" width="22" height="16"></span>Iran</td>
+        <td>0</td><td>0</td><td>0</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">0</td>
+      </tr>
+      
+      <tr class="out">
+        <td class="pos">4</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/nz.svg" alt="New Zealand" title="New Zealand" loading="lazy" width="22" height="16"></span>New Zealand</td>
+        <td>0</td><td>0</td><td>0</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">0</td>
+      </tr>
+      
+    </tbody>
+  </table>
+  
+  <table class="group-table">
+    <caption>Group H</caption>
+    <thead>
+      <tr><th class="pos">#</th><th class="tname">Team</th>
+        <th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr>
+    </thead>
+    <tbody>
+      
+      <tr class="adv">
+        <td class="pos">1</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/sa.svg" alt="Saudi Arabia" title="Saudi Arabia" loading="lazy" width="22" height="16"></span>Saudi Arabia</td>
+        <td>1</td><td>0</td><td>1</td><td>0</td>
+        <td>1</td><td>1</td><td>+0</td><td class="pts">1</td>
+      </tr>
+      
+      <tr class="adv">
+        <td class="pos">2</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/uy.svg" alt="Uruguay" title="Uruguay" loading="lazy" width="22" height="16"></span>Uruguay</td>
+        <td>1</td><td>0</td><td>1</td><td>0</td>
+        <td>1</td><td>1</td><td>+0</td><td class="pts">1</td>
+      </tr>
+      
+      <tr class="third">
+        <td class="pos">3</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/cv.svg" alt="Cape Verde" title="Cape Verde" loading="lazy" width="22" height="16"></span>Cape Verde</td>
+        <td>1</td><td>0</td><td>1</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">1</td>
+      </tr>
+      
+      <tr class="out">
+        <td class="pos">4</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/es.svg" alt="Spain" title="Spain" loading="lazy" width="22" height="16"></span>Spain</td>
+        <td>1</td><td>0</td><td>1</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">1</td>
+      </tr>
+      
+    </tbody>
+  </table>
+  
+  <table class="group-table">
+    <caption>Group I</caption>
+    <thead>
+      <tr><th class="pos">#</th><th class="tname">Team</th>
+        <th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr>
+    </thead>
+    <tbody>
+      
+      <tr class="adv">
+        <td class="pos">1</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/fr.svg" alt="France" title="France" loading="lazy" width="22" height="16"></span>France</td>
+        <td>0</td><td>0</td><td>0</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">0</td>
+      </tr>
+      
+      <tr class="adv">
+        <td class="pos">2</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/iq.svg" alt="Iraq" title="Iraq" loading="lazy" width="22" height="16"></span>Iraq</td>
+        <td>0</td><td>0</td><td>0</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">0</td>
+      </tr>
+      
+      <tr class="third">
+        <td class="pos">3</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/no.svg" alt="Norway" title="Norway" loading="lazy" width="22" height="16"></span>Norway</td>
+        <td>0</td><td>0</td><td>0</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">0</td>
+      </tr>
+      
+      <tr class="out">
+        <td class="pos">4</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/sn.svg" alt="Senegal" title="Senegal" loading="lazy" width="22" height="16"></span>Senegal</td>
+        <td>0</td><td>0</td><td>0</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">0</td>
+      </tr>
+      
+    </tbody>
+  </table>
+  
+  <table class="group-table">
+    <caption>Group J</caption>
+    <thead>
+      <tr><th class="pos">#</th><th class="tname">Team</th>
+        <th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr>
+    </thead>
+    <tbody>
+      
+      <tr class="adv">
+        <td class="pos">1</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/dz.svg" alt="Algeria" title="Algeria" loading="lazy" width="22" height="16"></span>Algeria</td>
+        <td>0</td><td>0</td><td>0</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">0</td>
+      </tr>
+      
+      <tr class="adv">
+        <td class="pos">2</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/ar.svg" alt="Argentina" title="Argentina" loading="lazy" width="22" height="16"></span>Argentina</td>
+        <td>0</td><td>0</td><td>0</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">0</td>
+      </tr>
+      
+      <tr class="third">
+        <td class="pos">3</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/at.svg" alt="Austria" title="Austria" loading="lazy" width="22" height="16"></span>Austria</td>
+        <td>0</td><td>0</td><td>0</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">0</td>
+      </tr>
+      
+      <tr class="out">
+        <td class="pos">4</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/jo.svg" alt="Jordan" title="Jordan" loading="lazy" width="22" height="16"></span>Jordan</td>
+        <td>0</td><td>0</td><td>0</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">0</td>
+      </tr>
+      
+    </tbody>
+  </table>
+  
+  <table class="group-table">
+    <caption>Group K</caption>
+    <thead>
+      <tr><th class="pos">#</th><th class="tname">Team</th>
+        <th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr>
+    </thead>
+    <tbody>
+      
+      <tr class="adv">
+        <td class="pos">1</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/co.svg" alt="Colombia" title="Colombia" loading="lazy" width="22" height="16"></span>Colombia</td>
+        <td>0</td><td>0</td><td>0</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">0</td>
+      </tr>
+      
+      <tr class="adv">
+        <td class="pos">2</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/cd.svg" alt="DR Congo" title="DR Congo" loading="lazy" width="22" height="16"></span>DR Congo</td>
+        <td>0</td><td>0</td><td>0</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">0</td>
+      </tr>
+      
+      <tr class="third">
+        <td class="pos">3</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/pt.svg" alt="Portugal" title="Portugal" loading="lazy" width="22" height="16"></span>Portugal</td>
+        <td>0</td><td>0</td><td>0</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">0</td>
+      </tr>
+      
+      <tr class="out">
+        <td class="pos">4</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/uz.svg" alt="Uzbekistan" title="Uzbekistan" loading="lazy" width="22" height="16"></span>Uzbekistan</td>
+        <td>0</td><td>0</td><td>0</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">0</td>
+      </tr>
+      
+    </tbody>
+  </table>
+  
+  <table class="group-table">
+    <caption>Group L</caption>
+    <thead>
+      <tr><th class="pos">#</th><th class="tname">Team</th>
+        <th>P</th><th>W</th><th>D</th><th>L</th><th>GF</th><th>GA</th><th>GD</th><th>Pts</th></tr>
+    </thead>
+    <tbody>
+      
+      <tr class="adv">
+        <td class="pos">1</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/hr.svg" alt="Croatia" title="Croatia" loading="lazy" width="22" height="16"></span>Croatia</td>
+        <td>0</td><td>0</td><td>0</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">0</td>
+      </tr>
+      
+      <tr class="adv">
+        <td class="pos">2</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/gb-eng.svg" alt="England" title="England" loading="lazy" width="22" height="16"></span>England</td>
+        <td>0</td><td>0</td><td>0</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">0</td>
+      </tr>
+      
+      <tr class="third">
+        <td class="pos">3</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/gh.svg" alt="Ghana" title="Ghana" loading="lazy" width="22" height="16"></span>Ghana</td>
+        <td>0</td><td>0</td><td>0</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">0</td>
+      </tr>
+      
+      <tr class="out">
+        <td class="pos">4</td>
+        <td class="tname"><span class="flag"><img class="flag-img" src="https://flagcdn.com/pa.svg" alt="Panama" title="Panama" loading="lazy" width="22" height="16"></span>Panama</td>
+        <td>0</td><td>0</td><td>0</td><td>0</td>
+        <td>0</td><td>0</td><td>+0</td><td class="pts">0</td>
+      </tr>
+      
+    </tbody>
+  </table>
+  
+</div>
+
+  </main>
+  <footer>
+    <span>Jun 11 – Jul 19, 2026 · 48 teams · 16 cities · 104 matches · times shown in your local timezone</span>
+  </footer>
+  <script>window.WC_LIVE = "data/live_matches.json";</script>
+  <script src="appstatic/js/util.js"></script>
+  <script src="appstatic/js/live.js"></script>
+  
+</body>
+</html>
