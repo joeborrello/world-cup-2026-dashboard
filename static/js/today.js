@@ -8,8 +8,17 @@
   const grid = document.getElementById('matchGrid');
   if (!grid) return;
 
+  // The day "rolls over" at 2am local, not midnight: a match that kicks off
+  // between 00:00 and 01:59 (e.g. a midnight-ET game) still counts as the
+  // previous day's slate — i.e. it's still "tonight" before bedtime. Shifting
+  // by -2h before taking the calendar date does this; applied via keyOf to both
+  // the matches AND "now" so the comparison stays consistent.
+  const ROLLOVER_HOURS = 2;
   const pad = n => String(n).padStart(2, '0');
-  const keyOf = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+  const keyOf = d => {
+    const s = new Date(d.getTime() - ROLLOVER_HOURS * 3600 * 1000);
+    return `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`;
+  };
   const human = key => {
     const [y, m, d] = key.split('-').map(Number);
     return new Date(y, m - 1, d).toLocaleDateString(undefined,
