@@ -159,6 +159,14 @@
     }).join('');
   }
 
+  // ── isobar (pressure) legend (matches OWM's pressure palette, hPa) ───────────
+  // Evenly-spaced anchors over the legend's 940–1060 hPa range -> align with the bar.
+  const PRESSURE_ANCHORS_HPA = [940, 980, 1020, 1060];
+  function renderIsoLegend() {
+    const ticks = document.getElementById('isoTicks');
+    if (ticks) ticks.innerHTML = PRESSURE_ANCHORS_HPA.map(h => `<span>${h}</span>`).join('');
+  }
+
   // ── unit toggle ─────────────────────────────────────────────────────────────
   const unitToggle = document.getElementById('unitToggle');
   unitToggle.querySelectorAll('button').forEach(b => {
@@ -181,6 +189,7 @@
   const cbAdvis = document.getElementById('layAdvis');
   const hint = document.getElementById('liveHint');
   const tempLegend = document.getElementById('tempLegend');
+  const isoLegend = document.getElementById('isoLegend');
   let radarLayer = null, tempLayer = null, isobarLayer = null, advisLayer = null;
   let rvHost = null, rvPath = null, advisData = null;
 
@@ -198,6 +207,7 @@
     radarLayer = tempLayer = isobarLayer = advisLayer = null;
     cbRadar.checked = cbTemp.checked = cbIsobars.checked = cbAdvis.checked = false;
     tempLegend.hidden = true;
+    isoLegend.hidden = true;
   }
 
   function updateLiveLayers(date) {
@@ -237,10 +247,15 @@
   });
 
   cbIsobars.addEventListener('change', () => {
-    if (!cbIsobars.checked) { if (isobarLayer) map.removeLayer(isobarLayer); isobarLayer = null; return; }
+    if (!cbIsobars.checked) {
+      if (isobarLayer) map.removeLayer(isobarLayer);
+      isobarLayer = null; isoLegend.hidden = true; return;
+    }
     isobarLayer = L.tileLayer(
       `https://tile.openweathermap.org/map/pressure_new/{z}/{x}/{y}.png?appid=${window.WC.owmKey}`,
       { opacity: 0.7, zIndex: 250, attribution: '© OpenWeatherMap' }).addTo(map);
+    renderIsoLegend();
+    isoLegend.hidden = false;
   });
 
   cbAdvis.addEventListener('change', () => {

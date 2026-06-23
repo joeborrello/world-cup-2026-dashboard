@@ -274,6 +274,13 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
     rgb(255,194,40) 83.3%, rgb(252,128,20) 100%); }
 .temp-legend .tl-ticks { display: flex; justify-content: space-between; width: 150px;
   font-size: .68rem; font-weight: 600; color: var(--muted); }
+/* isobar (pressure) legend: same layout as the temp legend, OWM pressure palette */
+.iso-legend .tl-bar {
+  /* OWM pressure_new palette: ~940 hPa (low, blue) → ~1060 hPa (high, red) */
+  background: linear-gradient(to right,
+    rgb(106,90,205) 0%, rgb(47,143,214) 16.7%, rgb(75,208,214) 33.3%,
+    rgb(141,231,199) 50%, rgb(176,247,32) 58.3%, rgb(240,184,0) 66.7%,
+    rgb(251,85,21) 83.3%, rgb(243,0,0) 100%); }
 
 .live-layers { display: flex; flex-wrap: wrap; align-items: center; gap: .4rem 1rem;
   background: var(--card); border: 1px solid var(--line); border-radius: 10px;
