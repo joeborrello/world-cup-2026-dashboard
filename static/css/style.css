@@ -405,11 +405,14 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
 .bm-side.predicted .conf { margin-left: auto; font-size: .72rem; font-weight: 700; font-style: normal;
   color: #fff; background: var(--green); border-radius: 5px; padding: 0 .3rem; }
 .bmatch.has-pred { outline: 1px dashed var(--green); outline-offset: 1px; }
-.binner.projecting .bmatch.tbd-none {} /* (no-op hook) */
 
-/* interactive manipulation: click a projected team to force it to advance */
-.binner.projecting .bm-side.predicted { cursor: pointer; }
-.binner.projecting .bm-side.predicted:hover { background: rgba(11,110,79,.08); }
+/* interactive manipulation: click a projected team to force it to advance.
+   NOTE: the inner element is <div class="bracket-inner" id="binner"> — the
+   `projecting` class is toggled on it, so these must key off `.bracket-inner`
+   (an earlier `.binner...` typo matched nothing, so picks looked unclickable). */
+.bracket-inner.projecting .bm-side.predicted { cursor: pointer; }
+.bracket-inner.projecting .bm-side.predicted:hover {
+  background: rgba(11,110,79,.12); box-shadow: inset 0 0 0 1px var(--green); }
 .bm-side.predicted.locked { background: rgba(11,110,79,.14); font-style: normal; }
 .bm-side.predicted.locked .name { font-weight: 800; }
 .bm-side.predicted .lock { margin-left: .25rem; font-size: .72rem; line-height: 1; }
@@ -417,7 +420,10 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
   border-radius: 8px; padding: .25rem .6rem; font-weight: 700; font-size: .8rem; cursor: pointer; }
 .pick-reset:not(:disabled):hover { border-color: var(--green); color: var(--green-dark); }
 .pick-reset:disabled { opacity: .45; cursor: default; }
-.pick-hint { margin: .1rem 0 .4rem; }
+.pick-hint { margin: .1rem 0 .6rem; display: flex; align-items: flex-start; gap: .5rem;
+  background: rgba(11,110,79,.08); border: 1px solid rgba(11,110,79,.3);
+  border-radius: 8px; padding: .5rem .7rem; font-size: .85rem; line-height: 1.4; }
+.pick-hint .ph-ico { font-size: 1rem; line-height: 1.3; }
 
 /* ── predictions page ──────────────────────────────────── */
 .pred-meta { color: var(--muted); font-size: .85rem; margin: .2rem 0 1rem; }

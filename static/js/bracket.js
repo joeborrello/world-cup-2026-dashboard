@@ -173,6 +173,10 @@
             side.dataset.match = num;
             const locked = overrides[num] === slot.team;
             side.classList.toggle('locked', locked);
+            // affordance: every projected team is clickable to steer the bracket
+            side.title = locked
+              ? `${slot.team} is locked to advance — click to undo`
+              : `Click to force ${slot.team} to advance from match #${num}`;
             const conf = Math.round(slot.conf * 100);
             const flag = slot.code
               ? `<img class="flag-img" src="https://flagcdn.com/${slot.code}.svg" width="22" height="16"> ` : '';

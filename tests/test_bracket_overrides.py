@@ -176,6 +176,24 @@ def test_css_styles_locked_pick():
     assert '.pick-reset' in css
 
 
+def test_css_clickable_affordance_targets_real_inner_class():
+    """The 'projecting' class is toggled on <div class="bracket-inner" id="binner">,
+    so the cursor/hover rules must key off `.bracket-inner.projecting`. A stale
+    `.binner.projecting` selector matches nothing, leaving the projected teams with
+    no clickable affordance (the JOE-10 revision bug). Pin the working selector."""
+    css = _read('static', 'css', 'style.css')
+    assert '.bracket-inner.projecting .bm-side.predicted' in css
+    assert 'cursor: pointer' in css
+    # the broken selector must not come back
+    assert '.binner.projecting' not in css
+
+
+def test_js_marks_predicted_sides_clickable():
+    """Each projected side gets a title tooltip so users discover it's clickable."""
+    js = _read('static', 'js', 'bracket.js')
+    assert 'side.title' in js
+
+
 def test_js_sends_and_reconciles_overrides():
     js = _read('static', 'js', 'bracket.js')
     # overrides are sent on the request...
