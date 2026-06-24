@@ -234,7 +234,12 @@ def _sim_once(group_fixtures, ko, third_slots, R):
 
 
 # ── aggregate many simulations ───────────────────────────────────────────────
-def _run(conn, sims):
+def _aggregate(conn, sims):
+    """Run `sims` Monte-Carlo iterations and return the raw tallies plus per-team
+    odds. This step is *independent of any user overrides* (overrides only change
+    how the single projected bracket is walked, never the underlying sampling),
+    so it is cached and the cheap `_project` step runs on top of it for each
+    interactive what-if edit."""
     group_fixtures = [
         {"num": r["num"], "group": r["group_letter"], "team1": r["team1"],
          "team2": r["team2"], "status": r["status"],
@@ -312,16 +317,48 @@ def _run(conn, sims):
             "advance": rr["r32"] / n, "r16": rr["r16"] / n, "qf": rr["qf"] / n,
             "sf": rr["sf"] / n, "final": rr["final"] / n, "champion": rr["champion"] / n,
         }
-    # ── projected bracket: assemble ONE internally-consistent (realizable)
-    # bracket instead of picking each slot's modal team independently (which
-    # lets a strong team be the favorite in two mutually-exclusive slots at
-    # once — e.g. both the Final and the 3rd-place match). We build a coherent
-    # R32 field from the simulated standings, then propagate the favored winner
-    # of each match forward so every later slot is fed by a real prior result.
-    # Confidence is still the per-slot *marginal* P(team occupies this slot).
+
     group_teams = {}
     for t, g in team_group.items():
         group_teams.setdefault(g, []).append(t)
+
+    n_fin = sum(1 for gm in group_fixtures if gm["status"] == "finished") + \
+        sum(1 for m in ko if m["status"] == "finished")
+    return {
+        "sims": sims, "n_finished": n_fin,
+        "generated": datetime.now(timezone.utc).isoformat(),
+        "teams": teams_out,
+        # internals consumed by _project (Python objects; never serialized as-is)
+        "_R": R, "_rank_counts": rank_counts, "_slot_counts": slot_counts,
+        "_group_teams": group_teams, "_third_slots": third_slots, "_ko": ko,
+    }
+
+
+# ── projected bracket (deterministic, override-aware) ────────────────────────
+def _project(agg, overrides):
+    """Assemble ONE internally-consistent (realizable) projected bracket from the
+    cached sim aggregates, honoring user `overrides` ({match_num: forced_winner}).
+
+    Instead of picking each slot's modal team independently (which lets a strong
+    team be the favorite in two mutually-exclusive slots at once), we build a
+    coherent R32 field from the simulated standings, then propagate the favored
+    winner of each match forward — except where the user has forced a winner, in
+    which case that team advances and feeds every later slot. Pure and fast (no
+    simulation), so interactive what-if edits recompute instantly.
+
+    Returns (slots_out, applied) where `applied` is the subset of `overrides`
+    that actually took effect (the forced team occupied that match), so the
+    client can drop stale picks. Confidence is still the per-slot *marginal*
+    P(team occupies this slot) from the unconditioned sims.
+    """
+    rank_counts = agg["_rank_counts"]
+    teams_out = agg["teams"]
+    R = agg["_R"]
+    slot_counts = agg["_slot_counts"]
+    third_slots = agg["_third_slots"]
+    ko = agg["_ko"]
+    group_teams = agg["_group_teams"]
+    n = float(agg["sims"])
 
     def _exp_rank(t):                       # lower = finishes higher on average
         c = rank_counts[t]
@@ -359,6 +396,7 @@ def _run(conn, sims):
             return r["loser"] if r else None
         return slot                         # already a literal team name (seeded/finished)
 
+    applied = {}
     ko_meta = {m["num"]: m for m in ko}
     for num in sorted(ko_meta):
         m = ko_meta[num]
@@ -371,8 +409,15 @@ def _run(conn, sims):
             if not t1 or not t2:
                 res[num] = {"team1": t1, "team2": t2, "winner": None, "loser": None}
                 continue
-            # favored winner of the *projected* pairing advances (Elo == model pick)
-            w, l = (t1, t2) if R.get(t1, 0) >= R.get(t2, 0) else (t2, t1)
+            # favored winner of the *projected* pairing advances (Elo == model pick),
+            # unless the user has forced one of the two competitors to advance.
+            forced = overrides.get(num)
+            if forced == t1:
+                w, l, applied[num] = t1, t2, t1
+            elif forced == t2:
+                w, l, applied[num] = t2, t1, t2
+            else:
+                w, l = (t1, t2) if R.get(t1, 0) >= R.get(t2, 0) else (t2, t1)
         res[num] = {"team1": t1, "team2": t2, "winner": w, "loser": l}
 
     slots_out = {}
@@ -387,32 +432,60 @@ def _run(conn, sims):
             else:
                 entry[side] = None
         slots_out[num] = entry
-
-    n_fin = sum(1 for gm in group_fixtures if gm["status"] == "finished") + \
-        sum(1 for m in ko if m["status"] == "finished")
-    return {
-        "sims": sims, "n_finished": n_fin,
-        "teams": teams_out, "slots": slots_out,
-        "generated": datetime.now(timezone.utc).isoformat(),
-    }
+    return slots_out, applied
 
 
-# ── cache (recompute only when the result set changes) ───────────────────────
+def _norm_overrides(overrides):
+    """Coerce a {match_num: team} mapping (keys may be str) to {int: str}."""
+    out = {}
+    for k, v in (overrides or {}).items():
+        try:
+            num = int(k)
+        except (TypeError, ValueError):
+            continue
+        if v:
+            out[num] = str(v)
+    return out
+
+
+# ── cache (recompute the heavy aggregate only when the result set changes) ────
 _lock = threading.Lock()
-_cache = {"key": None, "data": None}
+_cache = {"key": None, "agg": None}
 
 
-def predictions(conn, sims=None, seed=None):
-    sims = sims or SIMS
+def _aggregate_cached(conn, sims, seed):
     n_fin = conn.execute(
         "SELECT COUNT(*) FROM matches WHERE status='finished'").fetchone()[0]
     key = (n_fin, sims, seed)
     with _lock:
-        if _cache["key"] == key and _cache["data"] is not None:
-            return _cache["data"]
+        if _cache["key"] == key and _cache["agg"] is not None:
+            return _cache["agg"]
     if seed is not None:
         random.seed(seed)
-    data = _run(conn, sims)
+    agg = _aggregate(conn, sims)
     with _lock:
-        _cache["key"], _cache["data"] = key, data
-    return data
+        _cache["key"], _cache["agg"] = key, agg
+    return agg
+
+
+def predictions(conn, sims=None, seed=None):
+    """Per-team odds + the default (un-manipulated) projected bracket."""
+    sims = sims or SIMS
+    agg = _aggregate_cached(conn, sims, seed)
+    slots, _ = _project(agg, {})
+    return {"sims": agg["sims"], "n_finished": agg["n_finished"],
+            "generated": agg["generated"], "teams": agg["teams"], "slots": slots}
+
+
+def projected_bracket(conn, overrides=None, sims=None, seed=None):
+    """Projected bracket honoring user `overrides` ({match_num: forced_winner}).
+
+    Reuses the cached Monte-Carlo aggregate, so each what-if edit re-derives the
+    bracket deterministically and instantly. `overrides` that don't take effect
+    (the forced team isn't in that match) are dropped from the returned
+    `overrides` so the client can stay in sync."""
+    sims = sims or SIMS
+    agg = _aggregate_cached(conn, sims, seed)
+    slots, applied = _project(agg, _norm_overrides(overrides))
+    return {"sims": agg["sims"], "n_finished": agg["n_finished"],
+            "generated": agg["generated"], "slots": slots, "overrides": applied}

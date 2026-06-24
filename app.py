@@ -6,6 +6,7 @@ map's day-slider calls. All data comes from data/worldcup.db, built by
 seed_data.py and refreshed by update_results.py.
 """
 
+import json
 import re
 from datetime import date, datetime, timedelta
 
@@ -384,13 +385,41 @@ def api_predictions():
                     'generated': data['generated'], 'teams': teams})
 
 
+def _parse_overrides(raw):
+    """Parse the ?overrides= query param (JSON object {match_num: team}) into a
+    {int: str} mapping. Anything malformed is ignored — the engine further drops
+    any override whose team isn't actually in that match, so bad input is safe."""
+    if not raw:
+        return {}
+    try:
+        obj = json.loads(raw)
+    except (ValueError, TypeError):
+        return {}
+    if not isinstance(obj, dict):
+        return {}
+    out = {}
+    for k, v in obj.items():
+        try:
+            out[int(k)] = str(v)
+        except (TypeError, ValueError):
+            continue
+    return out
+
+
 @app.route('/api/bracket/predicted')
 def api_bracket_predicted():
-    """Projected (most-likely) team per knockout slot, up to a chosen depth."""
+    """Projected (most-likely) team per knockout slot, up to a chosen depth.
+
+    Accepts an optional ?overrides=<json {match_num: forced_winner}> for
+    interactive "what-if" manipulation: a forced winner advances and every later
+    slot it feeds is re-resolved to honor the change. The applied overrides are
+    echoed back so the client can drop any that no longer take effect.
+    """
     depth = request.args.get('depth', 'final')
     allowed = _depth_rounds(depth)
+    overrides = _parse_overrides(request.args.get('overrides'))
     conn = db.connect()
-    data = predict.predictions(conn)
+    data = predict.projected_bracket(conn, overrides)
     conn.close()
 
     def side(s):                       # fresh copy + flag code (don't mutate cache)
@@ -398,7 +427,8 @@ def api_bracket_predicted():
                                    'code': flag_code(s['team'])}
     slots = {num: {'round': e['round'], 'team1': side(e['team1']), 'team2': side(e['team2'])}
              for num, e in data['slots'].items() if e['round'] in allowed}
-    return jsonify({'depth': depth, 'n_finished': data['n_finished'], 'slots': slots})
+    return jsonify({'depth': depth, 'n_finished': data['n_finished'], 'slots': slots,
+                    'overrides': data['overrides']})
 
 
 @app.route('/api/pundits')

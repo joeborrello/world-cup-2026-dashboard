@@ -109,7 +109,7 @@
   // drag to pan
   let dragging = false, sx = 0, sy = 0, ox = 0, oy = 0;
   viewport.addEventListener('pointerdown', e => {
-    if (e.target.closest('a, button, input')) return;
+    if (e.target.closest('a, button, input, .bm-side.predicted')) return;
     dragging = true; sx = e.clientX; sy = e.clientY; ox = tx; oy = ty;
     viewport.setPointerCapture(e.pointerId);
     viewport.classList.add('grabbing');
@@ -123,23 +123,42 @@
   viewport.addEventListener('pointerup', endDrag);
   viewport.addEventListener('pointercancel', endDrag);
 
-  // ── projected bracket overlay ───────────────────────────────────────────────
+  // ── projected bracket overlay + interactive manipulation ────────────────────
+  // In "Projected" mode the user can click a projected team to FORCE it to win
+  // (advance) that match; we send those picks as overrides so the engine
+  // re-resolves every downstream slot around them. `overrides` is {matchNum: team}.
   const predToggle = document.getElementById('predToggle');
   const depthSel = document.getElementById('depthSel');
+  const resetBtn = document.getElementById('resetPicks');
+  const pickHint = document.getElementById('pickHint');
   let projected = false;
+  let overrides = {};
 
   function clearProjection() {
     inner.querySelectorAll('.bm-side.predicted').forEach(side => {
       if (side.dataset.orig !== undefined) side.innerHTML = side.dataset.orig;
-      side.classList.remove('predicted');
+      side.classList.remove('predicted', 'locked');
+      delete side.dataset.team;
+      delete side.dataset.match;
     });
     inner.querySelectorAll('.bmatch.has-pred').forEach(b => b.classList.remove('has-pred'));
   }
 
+  function updateResetBtn() {
+    if (!resetBtn) return;
+    const n = Object.keys(overrides).length;
+    resetBtn.disabled = !projected || n === 0;
+    resetBtn.textContent = n ? `Reset picks (${n})` : 'Reset picks';
+  }
+
   function applyProjection() {
     if (!(window.WC && window.WC.bracketPredUrl)) return;
-    fetch(window.WC.bracketPredUrl + '?depth=' + depthSel.value)
+    const params = new URLSearchParams({ depth: depthSel.value });
+    if (Object.keys(overrides).length) params.set('overrides', JSON.stringify(overrides));
+    fetch(window.WC.bracketPredUrl + '?' + params.toString())
       .then(r => r.json()).then(d => {
+        // reconcile to what the engine actually applied (drops stale/invalid picks)
+        overrides = Object.assign({}, d.overrides || {});
         clearProjection();
         Object.entries(d.slots).forEach(([num, e]) => {
           const box = document.getElementById('m' + num);
@@ -150,15 +169,37 @@
             if (!slot || !side || !side.classList.contains('tbd')) return; // keep real teams
             if (side.dataset.orig === undefined) side.dataset.orig = side.innerHTML;
             side.classList.add('predicted');
+            side.dataset.team = slot.team;
+            side.dataset.match = num;
+            const locked = overrides[num] === slot.team;
+            side.classList.toggle('locked', locked);
             const conf = Math.round(slot.conf * 100);
             const flag = slot.code
               ? `<img class="flag-img" src="https://flagcdn.com/${slot.code}.svg" width="22" height="16"> ` : '';
             side.innerHTML = `${flag}<span class="name">${slot.team}</span>` +
-              `<span class="conf" title="model confidence">${conf}%</span>`;
+              `<span class="conf" title="model confidence">${conf}%</span>` +
+              (locked ? '<span class="lock" title="locked to advance">🔒</span>' : '');
           });
           box.classList.add('has-pred');
         });
+        updateResetBtn();
       });
+  }
+
+  // click a projected team to force/unforce it as the winner of its match
+  inner.addEventListener('click', e => {
+    if (!projected) return;
+    const side = e.target.closest('.bm-side.predicted');
+    if (!side || !inner.contains(side)) return;
+    const num = side.dataset.match, team = side.dataset.team;
+    if (!num || !team) return;
+    if (overrides[num] === team) delete overrides[num];   // toggle the pick off
+    else overrides[num] = team;                           // set / switch the pick
+    applyProjection();
+  });
+
+  if (resetBtn) {
+    resetBtn.addEventListener('click', () => { overrides = {}; applyProjection(); });
   }
 
   if (predToggle) {
@@ -169,7 +210,9 @@
         projected = b.dataset.pred === '1';
         depthSel.disabled = !projected;
         inner.classList.toggle('projecting', projected);
+        if (pickHint) pickHint.hidden = !projected;
         if (projected) applyProjection(); else clearProjection();
+        updateResetBtn();
       });
     });
     depthSel.addEventListener('change', () => { if (projected) applyProjection(); });
