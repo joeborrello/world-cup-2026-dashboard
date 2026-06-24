@@ -131,8 +131,17 @@
   const depthSel = document.getElementById('depthSel');
   const resetBtn = document.getElementById('resetPicks');
   const pickHint = document.getElementById('pickHint');
+  const pickStatus = document.getElementById('pickStatus');
   let projected = false;
   let overrides = {};
+
+  // surface what the projection is doing so a failed/empty fetch is never silent
+  function setStatus(msg, kind) {
+    if (!pickStatus) return;
+    pickStatus.textContent = msg || '';
+    pickStatus.hidden = !msg;
+    pickStatus.className = 'pick-status' + (kind ? ' ' + kind : '');
+  }
 
   function clearProjection() {
     inner.querySelectorAll('.bm-side.predicted').forEach(side => {
@@ -155,11 +164,14 @@
     if (!(window.WC && window.WC.bracketPredUrl)) return;
     const params = new URLSearchParams({ depth: depthSel.value });
     if (Object.keys(overrides).length) params.set('overrides', JSON.stringify(overrides));
+    setStatus('Projecting the rest of the bracket…', 'loading');
     fetch(window.WC.bracketPredUrl + '?' + params.toString())
-      .then(r => r.json()).then(d => {
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(d => {
         // reconcile to what the engine actually applied (drops stale/invalid picks)
         overrides = Object.assign({}, d.overrides || {});
         clearProjection();
+        let filled = 0;
         Object.entries(d.slots).forEach(([num, e]) => {
           const box = document.getElementById('m' + num);
           if (!box) return;
@@ -183,10 +195,23 @@
             side.innerHTML = `${flag}<span class="name">${slot.team}</span>` +
               `<span class="conf" title="model confidence">${conf}%</span>` +
               (locked ? '<span class="lock" title="locked to advance">🔒</span>' : '');
+            filled++;
           });
           box.classList.add('has-pred');
         });
         updateResetBtn();
+        const n = Object.keys(overrides).length;
+        if (!filled) {
+          setStatus('No projected slots to fill — every knockout team here is already decided.', 'warn');
+        } else if (n) {
+          setStatus(`Showing your what-if with ${n} forced pick${n > 1 ? 's' : ''} — ` +
+                    `${filled} projected slots re-resolved around ${n > 1 ? 'them' : 'it'}.`, 'ok');
+        } else {
+          setStatus(`${filled} slots projected from the model. Click any italic team to force it through.`, 'ok');
+        }
+      })
+      .catch(err => {                       // never fail silently — tell the user
+        setStatus('Could not load the projection (' + err.message + '). Please retry.', 'error');
       });
   }
 
@@ -215,7 +240,7 @@
         depthSel.disabled = !projected;
         inner.classList.toggle('projecting', projected);
         if (pickHint) pickHint.hidden = !projected;
-        if (projected) applyProjection(); else clearProjection();
+        if (projected) { applyProjection(); } else { clearProjection(); setStatus(''); }
         updateResetBtn();
       });
     });

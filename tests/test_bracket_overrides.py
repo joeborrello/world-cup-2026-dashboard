@@ -168,6 +168,16 @@ def test_bracket_template_exposes_pick_controls(client):
     html = client.get('/bracket').get_data(as_text=True)
     assert 'id="resetPicks"' in html
     assert 'id="pickHint"' in html
+    # a live status line so the projection is never silent (loading/applied/error)
+    assert 'id="pickStatus"' in html
+
+
+def test_pick_hint_explains_which_teams_are_clickable(client):
+    """The revision feedback was 'I clicked and nothing happened / need instructions'.
+    The hint must spell out that the italic projected teams are the clickable ones."""
+    html = client.get('/bracket').get_data(as_text=True).lower()
+    assert 'italic' in html        # tells the user which teams are interactive
+    assert 'click' in html
 
 
 def test_css_styles_locked_pick():
@@ -202,3 +212,15 @@ def test_js_sends_and_reconciles_overrides():
     assert 'd.overrides' in js
     # clicking a projected side toggles its pick
     assert "closest('.bm-side.predicted')" in js
+
+
+def test_js_never_fails_the_projection_silently():
+    """A failed projection fetch must surface a message, not quietly do nothing —
+    that silent failure was the root of the 'I clicked and nothing happened' report.
+    Pin the non-ok check, the .catch handler, and the status updates."""
+    js = _read('static', 'js', 'bracket.js')
+    assert 'if (!r.ok)' in js              # reject non-2xx responses...
+    assert '.catch(' in js                 # ...and handle the rejection
+    assert 'setStatus(' in js              # surface state to the user
+    css = _read('static', 'css', 'style.css')
+    assert '.pick-status' in css

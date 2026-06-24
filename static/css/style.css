@@ -424,6 +424,12 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
   background: rgba(11,110,79,.08); border: 1px solid rgba(11,110,79,.3);
   border-radius: 8px; padding: .5rem .7rem; font-size: .85rem; line-height: 1.4; }
 .pick-hint .ph-ico { font-size: 1rem; line-height: 1.3; }
+/* live status line for the projection (loading / applied / empty / error) */
+.pick-status { margin: -.3rem 0 .6rem; font-size: .82rem; font-weight: 600; }
+.pick-status.loading { color: var(--muted); }
+.pick-status.ok { color: var(--green-dark); }
+.pick-status.warn { color: #8a6d00; }
+.pick-status.error { color: #b3261e; }
 
 /* ── predictions page ──────────────────────────────────── */
 .pred-meta { color: var(--muted); font-size: .85rem; margin: .2rem 0 1rem; }
