@@ -209,9 +209,10 @@
 </footer>
 
 <script>
-/* Live strip: reads the snapshot the droplet publishes to docs/data/live.json
-   every ~15 min and refreshes it client-side a few times an hour. Stays hidden
-   if the snapshot isn't there yet. */
+/* Live strip: polls the droplet's live API (/worldcup/api/landing) every ~15 min
+   for current phase, today's matches and title odds. Falls back to the committed
+   docs/data/live.json snapshot if the droplet is unreachable. Stays hidden if
+   neither source is available yet. */
 (function () {
   var strip = document.getElementById('liveStrip');
   var flag = function (c, n) { return c ?
@@ -265,13 +266,20 @@
     strip.hidden = false;
   }
 
+  var DROPLET = 'https://droplet.josephborrello.com/worldcup/api/landing';
   function load() {
-    fetch('data/live.json?t=' + Date.now(), { cache: 'no-store' })
+    fetch(DROPLET + '?t=' + Date.now(), { cache: 'no-store' })
       .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
-      .then(render).catch(function () { /* snapshot not published yet */ });
+      .then(render)
+      .catch(function () {
+        // droplet unreachable — fall back to the last committed snapshot
+        fetch('data/live.json?t=' + Date.now(), { cache: 'no-store' })
+          .then(function (r) { return r.ok ? r.json() : Promise.reject(); })
+          .then(render).catch(function () { /* nothing to show yet */ });
+      });
   }
   load();
-  setInterval(load, 180000);
+  setInterval(load, 900000);
 })();
 </script>
 
