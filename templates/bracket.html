@@ -91,10 +91,19 @@
   </div>
 </div>
 
-<p class="pick-hint subtle" id="pickHint" hidden>Tip: click a projected team to <b>force it to advance</b> —
-  the rest of the bracket re-simulates around your pick. Click again to undo, or <b>Reset picks</b> to clear all.</p>
+<p class="pick-hint" id="pickHint" hidden><span class="ph-ico">👆</span>
+  <span><b>Interactive what-if bracket.</b> The <i>italic</i> teams are the model's projected
+  winners. <b>Click a match box to make that team advance</b> — click the upper team's half to
+  pick it, the lower half to pick the other. The picked team turns solid green ✓ and the rest of
+  the bracket re-projects around it; a banner at the bottom of the bracket confirms each pick.
+  Click again to undo, or use <b>Reset picks</b> to clear all. <b>Tip:</b> picking an
+  <i>underdog</i> (a team that wasn't already projected to win) is what visibly shifts the later
+  rounds — picking the favourite just locks in what the model already expected. Zoom in for
+  bigger boxes. (Teams already decided on the pitch can't be changed.)</span></p>
+<p class="pick-status" id="pickStatus" role="status" aria-live="polite" hidden></p>
 
 <div class="bracket-viewport" id="bviewport">
+  <p class="pick-toast" id="pickToast" role="status" aria-live="polite" hidden></p>
   <div class="bracket-inner" id="binner">
     <svg class="bracket-links" id="blinks" preserveAspectRatio="none"></svg>
 

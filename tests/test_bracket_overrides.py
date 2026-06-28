@@ -168,12 +168,50 @@ def test_bracket_template_exposes_pick_controls(client):
     html = client.get('/bracket').get_data(as_text=True)
     assert 'id="resetPicks"' in html
     assert 'id="pickHint"' in html
+    # a live status line so the projection is never silent (loading/applied/error)
+    assert 'id="pickStatus"' in html
+
+
+def test_bracket_template_has_floating_pick_toast(client):
+    """A floating confirmation pinned over the bracket — the page-top status line
+    scrolls out of view, which is why earlier picks felt like they did nothing.
+    The toast lives *inside* the viewport so feedback shows where the user clicks."""
+    html = client.get('/bracket').get_data(as_text=True)
+    assert 'id="pickToast"' in html
+    viewport = html.split('id="bviewport"', 1)[1]
+    assert 'id="pickToast"' in viewport.split('</div>', 1)[0] or 'pickToast' in viewport[:400]
+
+
+def test_pick_hint_explains_which_teams_are_clickable(client):
+    """The revision feedback was 'I clicked and nothing happened / need instructions'.
+    The hint must spell out that the italic projected teams are the clickable ones."""
+    html = client.get('/bracket').get_data(as_text=True).lower()
+    assert 'italic' in html        # tells the user which teams are interactive
+    assert 'click' in html
 
 
 def test_css_styles_locked_pick():
     css = _read('static', 'css', 'style.css')
     assert '.bm-side.predicted.locked' in css
     assert '.pick-reset' in css
+
+
+def test_css_clickable_affordance_targets_real_inner_class():
+    """The 'projecting' class is toggled on <div class="bracket-inner" id="binner">,
+    so the cursor/hover rules must key off `.bracket-inner.projecting`. A stale
+    `.binner.projecting` selector matches nothing, leaving the projected teams with
+    no clickable affordance (the JOE-10 revision bug). Pin the working selector."""
+    css = _read('static', 'css', 'style.css')
+    assert '.bracket-inner.projecting .bm-side.predicted' in css
+    assert 'cursor: pointer' in css
+    # the broken selector must not come back
+    assert '.binner.projecting' not in css
+
+
+def test_js_marks_predicted_sides_clickable():
+    """Each projected side gets a title tooltip so users discover it's clickable."""
+    js = _read('static', 'js', 'bracket.js')
+    assert 'side.title' in js
 
 
 def test_js_sends_and_reconciles_overrides():
@@ -184,3 +222,42 @@ def test_js_sends_and_reconciles_overrides():
     assert 'd.overrides' in js
     # clicking a projected side toggles its pick
     assert "closest('.bm-side.predicted')" in js
+
+
+def test_js_accepts_a_click_anywhere_on_the_projected_box():
+    """The core revision bug: at the default 'Fit' zoom the team rows are only
+    ~10px tall, so a pixel-perfect hit was required and most clicks missed
+    ('I click a country and nothing happens'). A click anywhere on the projected
+    box must now resolve to the nearest team."""
+    js = _read('static', 'js', 'bracket.js')
+    # the whole match box is a fallback hit target...
+    assert "closest('.bmatch.has-pred')" in js
+    # ...mapped to the nearer team by vertical position
+    assert 'getBoundingClientRect' in js
+
+
+def test_js_surfaces_feedback_in_floating_toast():
+    """Click feedback must reach a viewport-pinned toast, not only the page-top
+    status line that scrolls away."""
+    js = _read('static', 'js', 'bracket.js')
+    assert 'pickToast' in js
+
+
+def test_css_styles_floating_toast_and_whole_box_target():
+    css = _read('static', 'css', 'style.css')
+    assert '.pick-toast' in css
+    assert 'position: fixed' in css.split('.pick-toast', 1)[1][:200]
+    # the whole projected box shows a pointer cursor (not just the thin team row)
+    assert '.bracket-inner.projecting .bmatch.has-pred' in css
+
+
+def test_js_never_fails_the_projection_silently():
+    """A failed projection fetch must surface a message, not quietly do nothing —
+    that silent failure was the root of the 'I clicked and nothing happened' report.
+    Pin the non-ok check, the .catch handler, and the status updates."""
+    js = _read('static', 'js', 'bracket.js')
+    assert 'if (!r.ok)' in js              # reject non-2xx responses...
+    assert '.catch(' in js                 # ...and handle the rejection
+    assert 'setStatus(' in js              # surface state to the user
+    css = _read('static', 'css', 'style.css')
+    assert '.pick-status' in css
