@@ -461,7 +461,8 @@ def api_bracket_predicted():
     def side(s):                       # fresh copy + flag code (don't mutate cache)
         return None if not s else {'team': s['team'], 'conf': s['conf'],
                                    'code': flag_code(s['team'])}
-    slots = {num: {'round': e['round'], 'team1': side(e['team1']), 'team2': side(e['team2'])}
+    slots = {num: {'round': e['round'], 'locked': e.get('locked', False),
+                   'team1': side(e['team1']), 'team2': side(e['team2'])}
              for num, e in data['slots'].items() if e['round'] in allowed}
     return jsonify({'depth': depth, 'n_finished': data['n_finished'], 'slots': slots,
                     'overrides': data['overrides']})

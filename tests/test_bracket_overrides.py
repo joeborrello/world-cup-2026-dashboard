@@ -57,6 +57,18 @@ def _resolved_r32(slots):
     raise AssertionError('no fully-resolved R32 match in projection')
 
 
+def _resolved_open(slots):
+    """First fully-resolved knockout match that is NOT locked (i.e. not already
+    finished), so its winner can still be forced. Robust as the tournament
+    progresses and earlier rounds become locked, where _resolved_r32 would pick a
+    finished match the engine (correctly) refuses to override."""
+    for num in sorted(slots):
+        e = slots[num]
+        if e['team1'] and e['team2'] and not e.get('locked'):
+            return num, e['team1']['team'], e['team2']['team']
+    raise AssertionError('no open (overridable) resolved match in projection')
+
+
 def _downstream_of(slots, num, team):
     """Match numbers after `num` where `team` appears on either side."""
     return [n for n in sorted(slots) if n > num
@@ -76,7 +88,7 @@ def test_forcing_underdog_carries_it_downstream(conn):
     """Forcing the team that does NOT win by default must flip the match winner
     and replace the default winner everywhere downstream."""
     base = predict.projected_bracket(conn, {}, sims=SIMS, seed=SEED)['slots']
-    num, t1, t2 = _resolved_r32(base)
+    num, t1, t2 = _resolved_open(base)
 
     # The default winner is the competitor that appears in a later slot.
     if _downstream_of(base, num, t1):
@@ -143,15 +155,24 @@ def test_parse_overrides(raw, expected):
     assert flask_app._parse_overrides(raw) == expected
 
 
-def test_endpoint_echoes_applied_overrides(client, conn):
-    base = predict.projected_bracket(conn, {}, sims=SIMS, seed=SEED)['slots']
-    num, t1, t2 = _resolved_r32(base)
-    ov = json.dumps({str(num): t2})
-    resp = client.get('/api/bracket/predicted?depth=final&overrides=' + ov)
+def test_endpoint_echoes_applied_overrides(client):
+    # Drive the override off the endpoint's OWN projection (served from the cached
+    # aggregate), so we force a team the endpoint actually placed in that match —
+    # comparing against a differently-seeded projection can disagree on the
+    # sim-dependent third-place slots.
+    base = client.get('/api/bracket/predicted',
+                      query_string={'depth': 'final'}).get_json()['slots']
+    num = next(n for n in sorted(base, key=int)
+               if base[n]['team1'] and base[n]['team2'] and not base[n].get('locked'))
+    t2 = base[num]['team2']['team']
+    # pass via query_string so values with '&' (e.g. "Bosnia & Herzegovina") are
+    # URL-encoded — the real client uses URLSearchParams, which does the same.
+    resp = client.get('/api/bracket/predicted',
+                      query_string={'depth': 'final', 'overrides': json.dumps({num: t2})})
     assert resp.status_code == 200
     body = resp.get_json()
     assert 'overrides' in body
-    assert body['overrides'].get(str(num)) == t2
+    assert body['overrides'].get(num) == t2
 
 
 def test_endpoint_without_overrides_still_works(client):

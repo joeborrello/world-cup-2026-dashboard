@@ -423,6 +423,10 @@ def _project(agg, overrides):
     slots_out = {}
     for num in slot_counts:
         entry = {"round": round_of(num)}
+        m = ko_meta.get(num)
+        # a finished match has a settled winner — it can't be re-picked, so mark
+        # it locked (the UI shows it non-interactive instead of swallowing clicks)
+        entry["locked"] = bool(m and m["status"] == "finished" and m["score1"] is not None)
         r = res.get(num, {})
         for side in ("team1", "team2"):
             team = r.get(side)
