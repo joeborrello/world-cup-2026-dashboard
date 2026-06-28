@@ -214,7 +214,7 @@ def _sim_once(group_fixtures, ko, third_slots, R):
         if lm:
             r = results.get(int(lm.group(1)))
             return r["loser"] if r else None
-        return None
+        return slot  # a literal team name (openfootball-decided knockout team)
 
     for m in ko:
         num = m["num"]
