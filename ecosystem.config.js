@@ -14,25 +14,18 @@ module.exports = {
       },
     },
     {
-      // Refresh scores/standings/bracket every 15 minutes from openfootball
+      // Refresh scores/standings/bracket every ~7 minutes from openfootball
       // (and football-data.org if a key is set above).
       name: 'worldcup-2026-updater',
       script: '/var/www/worldcup-2026/update_results.py',
       interpreter: '/var/www/worldcup-2026/venv/bin/python',
       cwd: '/var/www/worldcup-2026',
-      cron_restart: '*/15 * * * *',
+      cron_restart: '*/7 * * * *',
       autorestart: false,
     },
-    {
-      // Publish a small live-data snapshot to docs/data/live.json and push it
-      // to GitHub so the Pages landing site stays current. Runs a few minutes
-      // behind the updater; only commits when the content actually changed.
-      name: 'worldcup-2026-pages',
-      script: '/var/www/worldcup-2026/publish_pages.py',
-      interpreter: '/var/www/worldcup-2026/venv/bin/python',
-      cwd: '/var/www/worldcup-2026',
-      cron_restart: '3,18,33,48 * * * *',
-      autorestart: false,
-    },
+    // The Pages landing site now polls the droplet's /api/landing endpoint
+    // directly, so the old git-push snapshot publisher (worldcup-2026-pages,
+    // publish_pages.py) has been retired — no more churn commits on main.
+    // docs/data/live.json is kept only as an offline fallback.
   ],
 };

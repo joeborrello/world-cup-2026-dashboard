@@ -233,10 +233,12 @@ def resolve_bracket(conn, standings, thirds=None):
     } for m in ko}
     slots = {m["num"]: (m["team1_slot"], m["team2_slot"]) for m in ko}
 
-    # pre-seed best-3rd-place slots (only resolves once all groups are complete)
+    # pre-seed best-3rd-place slots (only resolves once all groups are complete).
+    # Overwrite rather than fill-if-empty: standings can change as late results
+    # land, and a stale assignment must be corrected, not kept.
     third_assign = assign_third_place_slots(conn, standings, thirds or [])
     for (num, side), team in third_assign.items():
-        if num in state and state[num][side] is None:
+        if num in state:
             state[num][side] = team
 
     def winner(n):
@@ -270,17 +272,21 @@ def resolve_bracket(conn, standings, thirds=None):
             return loser(int(lm.group(1)))
         return None  # "3A/B/C/D/F" and anything else
 
-    # iterate to a fixed point (later rounds depend on earlier ones)
+    # iterate to a fixed point (later rounds depend on earlier ones). Re-resolve
+    # every slot each pass and OVERWRITE when the derived team changes — a score
+    # correction upstream (e.g. a fixed group result) must re-seed the bracket,
+    # not be ignored because the slot was already filled with a now-stale team.
+    # `resolve` only returns a team once its feeder is settled, so we never erase
+    # a known team back to None.
     for _ in range(len(ko) + 1):
         changed = False
         for n in sorted(state):
             s1, s2 = slots[n]
             for key, slot in (("team1", s1), ("team2", s2)):
-                if state[n][key] is None:
-                    r = resolve(slot)
-                    if r is not None:
-                        state[n][key] = r
-                        changed = True
+                r = resolve(slot)
+                if r is not None and state[n][key] != r:
+                    state[n][key] = r
+                    changed = True
         if not changed:
             break
 

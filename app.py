@@ -8,6 +8,7 @@ seed_data.py and refreshed by update_results.py.
 
 import json
 import re
+import time
 from datetime import date, datetime, timedelta
 
 from flask import Flask, jsonify, render_template, request
@@ -17,6 +18,7 @@ import config
 import db
 import live
 import predict
+import publish_pages
 import pundits
 import weather
 from flags import flag, flag_code
@@ -331,6 +333,40 @@ def api_live():
     data = live.live_matches(conn)
     conn.close()
     return jsonify({'matches': data, 'now': datetime.utcnow().isoformat() + 'Z'})
+
+
+# Title odds come from a Monte-Carlo sim that's too costly to run per request, so
+# cache them briefly; phase + today's matches are cheap SQL and stay fresh.
+_LANDING_ODDS = {'odds': None, 'ts': 0.0}
+_LANDING_ODDS_TTL = 600  # seconds
+
+
+def _landing_title_odds(conn):
+    now = time.time()
+    if _LANDING_ODDS['odds'] is None or now - _LANDING_ODDS['ts'] > _LANDING_ODDS_TTL:
+        _LANDING_ODDS['odds'] = publish_pages._title_odds(conn)
+        _LANDING_ODDS['ts'] = now
+    return _LANDING_ODDS['odds']
+
+
+@app.route('/api/landing')
+def api_landing():
+    """Live landing-page payload for the GitHub Pages site: current phase, today's
+    matches (with live scores), and cached title odds. CORS-open so the .io page
+    can poll the droplet directly instead of reading a git-committed snapshot."""
+    conn = db.connect()
+    payload = {
+        'phase': publish_pages._phase(conn),
+        'today': publish_pages._today(conn),
+        'title_odds': _landing_title_odds(conn),
+        'live_url': 'https://droplet.josephborrello.com/worldcup/',
+        'generated': datetime.utcnow().isoformat() + 'Z',
+    }
+    conn.close()
+    resp = jsonify(payload)
+    resp.headers['Access-Control-Allow-Origin'] = '*'
+    resp.headers['Cache-Control'] = 'public, max-age=120'
+    return resp
 
 
 @app.route('/api/days')

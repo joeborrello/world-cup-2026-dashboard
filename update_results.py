@@ -44,8 +44,47 @@ def _update_from_openfootball(conn, prefer_remote=True):
     return changed
 
 
+# football-data.org names a few countries differently than openfootball/our DB.
+_NAME_ALIASES = {
+    "korea republic": "south korea",
+    "korea dpr": "north korea",
+    "ir iran": "iran",
+    "united states": "usa",
+    "côte d'ivoire": "ivory coast",
+    "cote d'ivoire": "ivory coast",
+    "czechia": "czech republic",
+    "bosnia and herzegovina": "bosnia & herzegovina",
+}
+
+
+def _norm_team(name):
+    n = (name or "").strip().lower()
+    return _NAME_ALIASES.get(n, n)
+
+
+def _aligned_scores(home_name, away_name, home_score, away_score, team1, team2):
+    """Map football-data (home/away) onto our (team1/team2) by NAME, not position.
+
+    Returns (score1, score2) aligned to team1/team2, or None when the teams can't
+    be matched confidently. Position-based mapping was the bug that wrote scores
+    to the wrong side and flipped a group's 2nd place.
+    """
+    h, a = _norm_team(home_name), _norm_team(away_name)
+    t1, t2 = _norm_team(team1), _norm_team(team2)
+    if h == t1 and a == t2:
+        return home_score, away_score
+    if h == t2 and a == t1:
+        return away_score, home_score
+    return None
+
+
 def _update_from_football_data(conn):
-    """Best-effort overlay from football-data.org. Silent no-op without a key."""
+    """Best-effort in-play overlay from football-data.org. Silent no-op without a key.
+
+    openfootball is authoritative for final results; this only surfaces scores
+    for matches openfootball hasn't already settled, and only when team names
+    align — so it can speed up live scores without ever corrupting a final.
+    """
     if not config.FOOTBALL_DATA_API_KEY:
         return 0
     try:
@@ -74,13 +113,22 @@ def _update_from_football_data(conn):
         except ValueError:
             continue
         row = conn.execute(
-            "SELECT num FROM matches WHERE utc_datetime=?", (key,)
+            "SELECT num, team1, team2, status FROM matches WHERE utc_datetime=?", (key,)
         ).fetchone()
         if row is None:
             continue
+        if row["status"] == "finished":
+            continue  # openfootball owns finals — don't overwrite a settled result
+        scores = _aligned_scores(
+            (fx.get("homeTeam") or {}).get("name"),
+            (fx.get("awayTeam") or {}).get("name"),
+            ft["home"], ft["away"], row["team1"], row["team2"],
+        )
+        if scores is None:
+            continue  # can't confidently align teams — skip rather than corrupt
         conn.execute(
             "UPDATE matches SET score1=?, score2=?, status='finished' WHERE num=?",
-            (ft["home"], ft["away"], row["num"]),
+            (scores[0], scores[1], row["num"]),
         )
         changed += 1
     conn.commit()
