@@ -109,7 +109,10 @@
   // drag to pan
   let dragging = false, sx = 0, sy = 0, ox = 0, oy = 0;
   viewport.addEventListener('pointerdown', e => {
-    if (e.target.closest('a, button, input, .bm-side.predicted')) return;
+    if (e.target.closest('a, button, input')) return;
+    // while projecting, a press on a projected box is a pick, not a pan — so the
+    // whole box stays a reliable click target (pan elsewhere: rails, headers, gaps)
+    if (projected && e.target.closest('.bmatch.has-pred')) return;
     dragging = true; sx = e.clientX; sy = e.clientY; ox = tx; oy = ty;
     viewport.setPointerCapture(e.pointerId);
     viewport.classList.add('grabbing');
@@ -132,15 +135,43 @@
   const resetBtn = document.getElementById('resetPicks');
   const pickHint = document.getElementById('pickHint');
   const pickStatus = document.getElementById('pickStatus');
+  // a floating copy of the status pinned inside the viewport, so the result of a
+  // click is visible right where the user is looking even when the page-top
+  // status line is scrolled out of view (the "I clicked and nothing happened" report)
+  const pickToast = document.getElementById('pickToast');
   let projected = false;
   let overrides = {};
+  let toastTimer;
 
   // surface what the projection is doing so a failed/empty fetch is never silent
   function setStatus(msg, kind) {
-    if (!pickStatus) return;
-    pickStatus.textContent = msg || '';
-    pickStatus.hidden = !msg;
-    pickStatus.className = 'pick-status' + (kind ? ' ' + kind : '');
+    if (pickStatus) {
+      pickStatus.textContent = msg || '';
+      pickStatus.hidden = !msg;
+      pickStatus.className = 'pick-status' + (kind ? ' ' + kind : '');
+    }
+    if (pickToast) {
+      pickToast.textContent = msg || '';
+      pickToast.hidden = !msg;
+      pickToast.className = 'pick-toast' + (kind ? ' ' + kind : '');
+      // let "applied" confirmations linger then fade; keep loading/errors up
+      clearTimeout(toastTimer);
+      if (msg && kind === 'ok') {
+        toastTimer = setTimeout(() => { pickToast.hidden = true; }, 6000);
+      }
+    }
+  }
+
+  // snapshot the team currently shown in every projected slot, keyed by
+  // match-number + side, so a re-projection can tell which slots actually moved
+  function snapshotSlots() {
+    const snap = {};
+    inner.querySelectorAll('.bmatch').forEach(box => {
+      box.querySelectorAll('.bm-side').forEach((side, i) => {
+        if (side.dataset.team) snap[box.id + ':' + i] = side.dataset.team;
+      });
+    });
+    return snap;
   }
 
   function clearProjection() {
@@ -150,7 +181,20 @@
       delete side.dataset.team;
       delete side.dataset.match;
     });
-    inner.querySelectorAll('.bmatch.has-pred').forEach(b => b.classList.remove('has-pred'));
+    inner.querySelectorAll('.bmatch.has-pred, .bmatch.forced')
+      .forEach(b => b.classList.remove('has-pred', 'forced'));
+  }
+
+  // briefly flash a set of boxes so a re-projection is never silent — the user
+  // sees exactly which slots their pick moved (plus the box they clicked)
+  function flashBoxes(ids) {
+    ids.forEach(id => {
+      const box = document.getElementById(id);
+      if (!box) return;
+      box.classList.remove('flash');
+      void box.offsetWidth;          // restart the CSS animation
+      box.classList.add('flash');
+    });
   }
 
   function updateResetBtn() {
@@ -160,11 +204,12 @@
     resetBtn.textContent = n ? `Reset picks (${n})` : 'Reset picks';
   }
 
-  function applyProjection() {
+  function applyProjection(clickedNum) {
     if (!(window.WC && window.WC.bracketPredUrl)) return;
     const params = new URLSearchParams({ depth: depthSel.value });
     if (Object.keys(overrides).length) params.set('overrides', JSON.stringify(overrides));
     setStatus('Projecting the rest of the bracket…', 'loading');
+    const prev = snapshotSlots();         // remember teams before re-projecting
     fetch(window.WC.bracketPredUrl + '?' + params.toString())
       .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(d => {
@@ -172,11 +217,12 @@
         overrides = Object.assign({}, d.overrides || {});
         clearProjection();
         let filled = 0;
+        const moved = new Set();          // boxes whose projected team changed
         Object.entries(d.slots).forEach(([num, e]) => {
           const box = document.getElementById('m' + num);
           if (!box) return;
           const sides = box.querySelectorAll('.bm-side');
-          [['team1', sides[0]], ['team2', sides[1]]].forEach(([k, side]) => {
+          [['team1', sides[0], 0], ['team2', sides[1], 1]].forEach(([k, side, i]) => {
             const slot = e[k];
             if (!slot || !side || !side.classList.contains('tbd')) return; // keep real teams
             if (side.dataset.orig === undefined) side.dataset.orig = side.innerHTML;
@@ -187,22 +233,39 @@
             side.classList.toggle('locked', locked);
             // affordance: every projected team is clickable to steer the bracket
             side.title = locked
-              ? `${slot.team} is locked to advance — click to undo`
-              : `Click to force ${slot.team} to advance from match #${num}`;
+              ? `${slot.team} is your pick to advance — click to undo`
+              : `Click to make ${slot.team} advance from match #${num}`;
             const conf = Math.round(slot.conf * 100);
             const flag = slot.code
               ? `<img class="flag-img" src="https://flagcdn.com/${slot.code}.svg" width="22" height="16"> ` : '';
             side.innerHTML = `${flag}<span class="name">${slot.team}</span>` +
               `<span class="conf" title="model confidence">${conf}%</span>` +
-              (locked ? '<span class="lock" title="locked to advance">🔒</span>' : '');
+              (locked ? '<span class="lock" title="your pick to advance">✓</span>' : '');
+            // a projected team that differs from what was here before has "moved"
+            if (prev['m' + num + ':' + i] && prev['m' + num + ':' + i] !== slot.team) {
+              moved.add('m' + num);
+            }
             filled++;
           });
           box.classList.add('has-pred');
+          if (overrides[num]) box.classList.add('forced');   // box-level pick marker
         });
         updateResetBtn();
+        // always flash the box the user clicked (so a pick is never silent, even
+        // when forcing the already-favoured team leaves the bracket unchanged)
+        // plus every downstream box whose projected team actually moved.
+        const flash = new Set(moved);
+        if (clickedNum) flash.add('m' + clickedNum);
+        flashBoxes(flash);
         const n = Object.keys(overrides).length;
         if (!filled) {
           setStatus('No projected slots to fill — every knockout team here is already decided.', 'warn');
+        } else if (clickedNum && moved.size) {
+          setStatus(`Pick applied — ${moved.size} downstream slot${moved.size > 1 ? 's' : ''} ` +
+                    `updated. ${n} forced pick${n > 1 ? 's' : ''} active.`, 'ok');
+        } else if (clickedNum) {
+          setStatus(`Pick locked in. (It matched the model's projection, so nothing ` +
+                    `downstream changed.) ${n} forced pick${n > 1 ? 's' : ''} active.`, 'ok');
         } else if (n) {
           setStatus(`Showing your what-if with ${n} forced pick${n > 1 ? 's' : ''} — ` +
                     `${filled} projected slots re-resolved around ${n > 1 ? 'them' : 'it'}.`, 'ok');
@@ -215,16 +278,38 @@
       });
   }
 
-  // click a projected team to force/unforce it as the winner of its match
+  // Resolve which projected team a click is aiming at. We accept a click anywhere
+  // on a projected match box — not just the thin team row — and map it to the
+  // nearer of the box's two projected teams by vertical position. At the default
+  // "Fit" zoom the rows are only ~10px tall, so demanding a pixel-perfect hit on
+  // the text made the feature feel dead ("I click a country and nothing happens").
+  function pickTarget(e) {
+    const exact = e.target.closest('.bm-side.predicted');
+    if (exact && inner.contains(exact)) return exact;
+    const box = e.target.closest('.bmatch.has-pred');
+    if (!box || !inner.contains(box)) return null;
+    const sides = Array.from(box.querySelectorAll('.bm-side.predicted[data-team]'));
+    if (sides.length <= 1) return sides[0] || null;
+    // choose the projected side whose vertical centre is closest to the click
+    let best = null, bestD = Infinity;
+    sides.forEach(s => {
+      const r = s.getBoundingClientRect();
+      const d = Math.abs(e.clientY - (r.top + r.height / 2));
+      if (d < bestD) { bestD = d; best = s; }
+    });
+    return best;
+  }
+
+  // click a projected team (or anywhere on its box) to force/unforce it as winner
   inner.addEventListener('click', e => {
     if (!projected) return;
-    const side = e.target.closest('.bm-side.predicted');
-    if (!side || !inner.contains(side)) return;
+    const side = pickTarget(e);
+    if (!side) return;
     const num = side.dataset.match, team = side.dataset.team;
     if (!num || !team) return;
     if (overrides[num] === team) delete overrides[num];   // toggle the pick off
     else overrides[num] = team;                           // set / switch the pick
-    applyProjection();
+    applyProjection(num);
   });
 
   if (resetBtn) {
