@@ -464,9 +464,10 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
 .pick-toast.warn { background: #8a6d00; }
 .pick-toast.error { background: #b3261e; }
 
-/* interactive manipulation: click a projected team to force it to advance */
-.binner.projecting .bm-side.predicted { cursor: pointer; }
-.binner.projecting .bm-side.predicted:hover { background: rgba(11,110,79,.08); }
+/* interactive manipulation: click a projected team to force it to advance.
+   (The clickable cursor/hover rules live above, keyed off the real
+   `.bracket-inner.projecting` class. The old short-class duplicates matched
+   nothing and have been removed.) */
 .bm-side.predicted.locked { background: rgba(11,110,79,.14); font-style: normal; }
 .bm-side.predicted.locked .name { font-weight: 800; }
 .bm-side.predicted .lock { margin-left: .25rem; font-size: .72rem; line-height: 1; }
