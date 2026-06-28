@@ -11,6 +11,7 @@ fully on openfootball alone; football-data.org just adds redundancy.
 Designed to be run on a schedule (e.g. every 15 minutes via cron/pm2).
 """
 
+import re
 import sys
 from datetime import datetime
 
@@ -21,6 +22,10 @@ import config
 import data_source
 import db
 
+# openfootball uses these as knockout slot placeholders until a matchup is decided.
+_THIRD_SLOT_RE = re.compile(r"^3[A-L/]+$")
+_ANY_SLOT_RE = re.compile(r"^(?:[12][A-L]|3[A-L/]+|W\d+|L\d+)$")
+
 
 def _update_from_openfootball(conn, prefer_remote=True):
     raw = data_source.fetch_raw(prefer_remote=prefer_remote)
@@ -28,17 +33,29 @@ def _update_from_openfootball(conn, prefer_remote=True):
     changed = 0
     for m in matches:
         cur = conn.execute(
-            "SELECT score1, score2, status FROM matches WHERE num=?",
+            "SELECT score1, score2, status, team1_slot, team2_slot FROM matches WHERE num=?",
             (m["num"],),
         ).fetchone()
         if cur is None:
             continue
+        sets, params = [], []
         if (cur["score1"], cur["score2"], cur["status"]) != (
                 m["score1"], m["score2"], m["status"]):
-            conn.execute(
-                "UPDATE matches SET score1=?, score2=?, status=? WHERE num=?",
-                (m["score1"], m["score2"], m["status"], m["num"]),
-            )
+            sets += ["score1=?", "score2=?", "status=?"]
+            params += [m["score1"], m["score2"], m["status"]]
+        # Adopt openfootball's authoritative 3rd-place R32 assignment: once a
+        # matchup is decided, the feed replaces the "3A/B/.." placeholder with the
+        # real team. Our own matcher only finds *a* valid allocation (not FIFA's
+        # official combination table), so trust the feed for these slots.
+        for col, of_val in (("team1_slot", m["team1_slot"]),
+                            ("team2_slot", m["team2_slot"])):
+            if (_THIRD_SLOT_RE.match(cur[col] or "")
+                    and of_val and not _ANY_SLOT_RE.match(of_val)):
+                sets.append(col + "=?")
+                params.append(of_val)
+        if sets:
+            conn.execute("UPDATE matches SET " + ", ".join(sets) + " WHERE num=?",
+                         (*params, m["num"]))
             changed += 1
     conn.commit()
     return changed

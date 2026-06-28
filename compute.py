@@ -270,7 +270,9 @@ def resolve_bracket(conn, standings, thirds=None):
         lm = LOSER_RE.match(slot)
         if lm:
             return loser(int(lm.group(1)))
-        return None  # "3A/B/C/D/F" and anything else
+        if THIRD_SLOT_RE.match(slot):
+            return None  # "3A/B/C/D/F" — filled by the pre-seed third_assign above
+        return slot      # a literal team name (an openfootball-decided knockout team)
 
     # iterate to a fixed point (later rounds depend on earlier ones). Re-resolve
     # every slot each pass and OVERWRITE when the derived team changes — a score
