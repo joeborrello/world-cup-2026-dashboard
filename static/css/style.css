@@ -403,6 +403,10 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
 
 /* predicted teams in the bracket */
 .bm-side.predicted { font-style: italic; }
+/* a "decided" side is a real team already qualified into an unplayed knockout
+   match (e.g. every R32 pairing once the groups finish). It's steerable like a
+   projection, but it isn't a guess — keep it upright with no confidence badge. */
+.bm-side.predicted.decided { font-style: normal; }
 .bm-side.predicted .name { color: var(--ink); }
 .bm-side.predicted .conf { margin-left: auto; font-size: .72rem; font-weight: 700; font-style: normal;
   color: #fff; background: var(--green); border-radius: 5px; padding: 0 .3rem; }

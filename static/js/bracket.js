@@ -177,7 +177,7 @@
   function clearProjection() {
     inner.querySelectorAll('.bm-side.predicted').forEach(side => {
       if (side.dataset.orig !== undefined) side.innerHTML = side.dataset.orig;
-      side.classList.remove('predicted', 'locked');
+      side.classList.remove('predicted', 'decided', 'locked');
       delete side.dataset.team;
       delete side.dataset.match;
     });
@@ -222,16 +222,27 @@
           const box = document.getElementById('m' + num);
           if (!box) return;
           const sides = box.querySelectorAll('.bm-side');
+          let pickable = 0;                 // sides in THIS box that became clickable
           [['team1', sides[0], 0], ['team2', sides[1], 1]].forEach(([k, side, i]) => {
             const slot = e[k];
-            if (!slot || !side || !side.classList.contains('tbd')) return; // keep real teams
+            if (!slot || !side) return;
+            const tbd = side.classList.contains('tbd');
+            // A finished match is settled — its real teams can't be re-picked. But an
+            // UNPLAYED knockout match whose two teams are already known (every R32
+            // match once the groups are decided, say) is still steerable: you pick
+            // which of the two real teams advances, exactly as for a projected
+            // pairing. Only fully-decided (locked) matches stay non-interactive.
+            if (!tbd && e.locked) return;   // keep settled/finished teams as-is
             if (side.dataset.orig === undefined) side.dataset.orig = side.innerHTML;
             side.classList.add('predicted');
+            // a real (already-qualified) team isn't a projection — don't italicise
+            // it or label it with a trivial 100% confidence, but keep it clickable
+            if (!tbd) side.classList.add('decided');
             side.dataset.team = slot.team;
             side.dataset.match = num;
             const locked = overrides[num] === slot.team;
             side.classList.toggle('locked', locked);
-            // affordance: every projected team is clickable to steer the bracket
+            // affordance: every steerable team is clickable to drive the bracket
             side.title = locked
               ? `${slot.team} is your pick to advance — click to undo`
               : `Click to make ${slot.team} advance from match #${num}`;
@@ -239,15 +250,16 @@
             const flag = slot.code
               ? `<img class="flag-img" src="https://flagcdn.com/${slot.code}.svg" width="22" height="16"> ` : '';
             side.innerHTML = `${flag}<span class="name">${slot.team}</span>` +
-              `<span class="conf" title="model confidence">${conf}%</span>` +
+              (tbd ? `<span class="conf" title="model confidence">${conf}%</span>` : '') +
               (locked ? '<span class="lock" title="your pick to advance">✓</span>' : '');
-            // a projected team that differs from what was here before has "moved"
+            // a slot whose team differs from what was here before has "moved"
             if (prev['m' + num + ':' + i] && prev['m' + num + ':' + i] !== slot.team) {
               moved.add('m' + num);
             }
             filled++;
+            pickable++;
           });
-          box.classList.add('has-pred');
+          if (pickable) box.classList.add('has-pred');       // only outline steerable boxes
           if (overrides[num]) box.classList.add('forced');   // box-level pick marker
         });
         updateResetBtn();
