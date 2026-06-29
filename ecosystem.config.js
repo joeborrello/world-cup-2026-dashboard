@@ -14,13 +14,14 @@ module.exports = {
       },
     },
     {
-      // Refresh scores/standings/bracket every ~7 minutes from openfootball
-      // (and football-data.org if a key is set above).
+      // Refresh scores/standings/bracket every 5 minutes from openfootball
+      // (and football-data.org if a key is set above). JOE-17 tightened this
+      // from every 7 minutes so live scores are never more than ~5 min stale.
       name: 'worldcup-2026-updater',
       script: '/var/www/worldcup-2026/update_results.py',
       interpreter: '/var/www/worldcup-2026/venv/bin/python',
       cwd: '/var/www/worldcup-2026',
-      cron_restart: '*/7 * * * *',
+      cron_restart: '*/5 * * * *',
       autorestart: false,
     },
     // The Pages landing site now polls the droplet's /api/landing endpoint

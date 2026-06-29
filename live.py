@@ -1,14 +1,19 @@
 """Currently in-play matches, for the live ticker shown across the site.
 
 Pulls football-data.org and keeps only IN_PLAY / PAUSED fixtures, mapped to our
-matches by UTC kickoff (the same key the 15-minute updater uses). Cached briefly
+matches by UTC kickoff (the same key the scheduled updater uses). Cached briefly
 in-process so football-data calls stay bounded no matter how many people are
-viewing. The live *minute* isn't on the free tier, so the frontend estimates it
-from kickoff time; PAUSED is surfaced as half-time.
+viewing.
+
+The minute of play is resolved *at the moment of each check* (JOE-17): we use
+football-data's own `minute` when the feed carries one, and otherwise estimate it
+from elapsed time since kickoff. Either way it is a snapshot — "the minute as of
+the most recent check" — not a clock the browser keeps ticking on its own, so the
+`checked_at` timestamp travels with it. PAUSED is surfaced as half-time.
 """
 
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 
 import requests
 
@@ -16,7 +21,57 @@ import config
 from flags import flag_code
 
 TTL_SECONDS = 45
-_CACHE = {"data": None, "ts": 0.0}
+_CACHE = {"data": None, "ts": 0.0, "checked_at": None}
+
+# A regulation half is 45'; the interval between halves is ~15 real minutes, so
+# once we're past the break the elapsed clock runs ~15' ahead of the match clock.
+_HALF_MINUTES = 45
+_HALF_TIME_BREAK = 15
+
+
+def _utcnow():
+    return datetime.now(timezone.utc)
+
+
+def live_minute(fx, kickoff, now, state):
+    """Best-effort minute of play, as of ``now`` (the check time).
+
+    Prefers football-data's own ``minute`` when the feed provides it; otherwise
+    estimates from elapsed time since ``kickoff``. Returns a short display label
+    ("63'", "45+'", "90+'") or "HT" at the break, or ``None`` when it can't be
+    placed (no kickoff / clock not started yet).
+    """
+    if state == "paused":
+        return "HT"
+    api_min = fx.get("minute")
+    if api_min not in (None, ""):
+        return f"{api_min}'"
+    if kickoff is None or now is None:
+        return None
+    elapsed = (now - kickoff).total_seconds() / 60.0
+    if elapsed < 0:
+        return None
+    if elapsed <= _HALF_MINUTES:                       # first half
+        return f"{int(elapsed) + 1}'"
+    if elapsed < _HALF_MINUTES + _HALF_TIME_BREAK:     # stoppage / approaching break
+        return "45+'"
+    minute = int(elapsed - _HALF_TIME_BREAK)           # second half, break removed
+    return "90+'" if minute >= 90 else f"{minute}'"
+
+
+def _parse_kickoff(utc):
+    """Parse a football-data ``utcDate`` (e.g. 2026-06-11T19:00:00Z) to aware UTC."""
+    if not utc:
+        return None
+    try:
+        return datetime.fromisoformat(utc.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def last_checked():
+    """ISO timestamp of the most recent successful live check, or None."""
+    return _CACHE["checked_at"]
 
 
 def live_matches(conn):
@@ -24,7 +79,7 @@ def live_matches(conn):
     if _CACHE["data"] is not None and now - _CACHE["ts"] < TTL_SECONDS:
         return _CACHE["data"]
     if not config.FOOTBALL_DATA_API_KEY:
-        _CACHE.update(data=[], ts=now)
+        _CACHE.update(data=[], ts=now, checked_at=_utcnow().isoformat())
         return []
 
     try:
@@ -35,23 +90,22 @@ def live_matches(conn):
     except Exception:
         return _CACHE["data"] or []        # serve last-known on error
 
+    checked_at = _utcnow()
     out = []
     for fx in payload.get("matches", []):
         if fx.get("status") not in ("IN_PLAY", "PAUSED"):
             continue
-        utc = fx.get("utcDate")
-        if not utc:
+        kickoff = _parse_kickoff(fx.get("utcDate"))
+        if kickoff is None:
             continue
-        try:
-            key = datetime.fromisoformat(utc.replace("Z", "+00:00")).isoformat()
-        except ValueError:
-            continue
+        key = kickoff.isoformat()
         row = conn.execute(
             "SELECT num, team1, team2, team1_slot, team2_slot, utc_datetime, "
             "group_letter, round_label FROM matches WHERE utc_datetime=?", (key,)).fetchone()
         if row is None:
             continue
         ft = (fx.get("score") or {}).get("fullTime") or {}
+        state = "paused" if fx["status"] == "PAUSED" else "in_play"
         out.append({
             "num": row["num"],
             "team1": row["team1"] or row["team1_slot"],
@@ -60,9 +114,10 @@ def live_matches(conn):
             "team2_code": flag_code(row["team2"]),
             "score1": ft.get("home") or 0,
             "score2": ft.get("away") or 0,
-            "state": "paused" if fx["status"] == "PAUSED" else "in_play",
+            "state": state,
+            "minute": live_minute(fx, kickoff, checked_at, state),
             "utc_datetime": row["utc_datetime"],
             "tag": (f"Group {row['group_letter']}" if row["group_letter"] else row["round_label"]),
         })
-    _CACHE.update(data=out, ts=now)
+    _CACHE.update(data=out, ts=now, checked_at=checked_at.isoformat())
     return out

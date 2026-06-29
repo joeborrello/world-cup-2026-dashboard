@@ -356,7 +356,8 @@ def api_live():
     conn = db.connect()
     data = live.live_matches(conn)
     conn.close()
-    return jsonify({'matches': data, 'now': datetime.utcnow().isoformat() + 'Z'})
+    return jsonify({'matches': data, 'now': datetime.utcnow().isoformat() + 'Z',
+                    'checked_at': live.last_checked()})
 
 
 # Title odds come from a Monte-Carlo sim that's too costly to run per request, so
