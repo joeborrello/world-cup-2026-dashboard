@@ -20,12 +20,19 @@ whose team is likely to go out early. The projection is read-only and additive:
 it never rewrites any goal already on the board.
 """
 
+import math
 from datetime import datetime, timezone
 
 import predict
 
 # A player is "in contention" if within this many goals of the current leader.
 CONTENTION_GAP = 2
+
+# Central probability mass covered by the projected goal *range*. You can't score
+# a fraction of a goal, so rather than a single decimal we report the band of
+# whole-goal outcomes a contender is most likely to land in — the 10th-to-90th
+# percentile (an 80% interval) of the additional-goals distribution.
+PROJ_INTERVAL = 0.80
 
 # Projection shrinkage. A raw goals-per-match rate is wild early on — a 2-in-1
 # opening game would extrapolate to a record-shattering tally. We regress each
@@ -142,24 +149,75 @@ def _expected_remaining_matches(conn, teams_odds):
     return out
 
 
+def _poisson_interval(mean, mass=PROJ_INTERVAL):
+    """Central whole-goal interval for a Poisson(`mean`) number of goals.
+
+    Goals are discrete events, so the *additional* goals a contender scores over
+    their remaining matches is naturally Poisson-distributed about the projected
+    mean. We return the `(low, high)` integer band holding the central `mass` of
+    that distribution (the 10th–90th percentile for the default 80%) — i.e. "on
+    course for between `low` and `high` more goals" rather than a fictitious
+    fractional tally. A zero (or negative) mean collapses to ``(0, 0)``.
+
+    Pure stdlib, matching the rest of the projection: we walk the Poisson PMF
+    (`p_0 = e^-mean`, `p_k = p_{k-1}·mean/k`) accumulating probability, take the
+    first k whose cumulative mass crosses the lower tail as `low` and the first
+    that reaches the upper edge as `high`.
+    """
+    if mean <= 0:
+        return 0, 0
+    lo_tail = (1.0 - mass) / 2.0          # e.g. 0.10 for an 80% interval
+    hi_edge = 1.0 - lo_tail               # e.g. 0.90
+    low = high = None
+    cumulative = 0.0
+    p = math.exp(-mean)
+    k = 0
+    while True:
+        cumulative += p
+        if low is None and cumulative >= lo_tail:
+            low = k
+        if cumulative >= hi_edge:
+            high = k
+            break
+        k += 1
+        p *= mean / k
+        if k > 1000:                      # numerical safety net; never reached in practice
+            high = k
+            break
+    return (low or 0), high
+
+
 def project(board, teams_odds, played, remaining):
     """Annotate each leaderboard row with a remaining-goals projection.
 
-    proj_additional = shrunk goals-per-match rate · expected remaining matches;
-    proj_total adds that to the present tally. The rate is measured against the
-    matches their *team* has played (we have no per-player appearance data) and
-    is regressed toward PRIOR_RATE (see the module constants) so a hot opening
-    game doesn't project an implausible final tally.
+    The expected additional goals = shrunk goals-per-match rate · expected
+    remaining matches; the rate is measured against the matches their *team* has
+    played (we have no per-player appearance data) and is regressed toward
+    PRIOR_RATE (see the module constants) so a hot opening game doesn't project
+    an implausible final tally.
+
+    Because a player can only score whole goals, the projection is surfaced as a
+    *range* rather than a single decimal: `proj_add_low..proj_add_high` is the
+    central PROJ_INTERVAL band of the Poisson distribution about that mean, and
+    `proj_total_low..proj_total_high` adds the present tally. The mean values
+    (`proj_additional` / `proj_total`) are kept as the stable sort key for the
+    "projected finish" ranking.
     """
     for p in board:
         tp = played.get(p["team"], 0)
         rate = (p["goals"] + PRIOR_RATE * PRIOR_MATCHES) / (tp + PRIOR_MATCHES)
         rem = remaining.get(p["team"], 0.0)
         proj_add = rate * rem
+        lo, hi = _poisson_interval(proj_add)
         p["rate"] = round(rate, 2)
         p["proj_remaining_matches"] = round(rem, 1)
+        # expected values — retained as the projected-finish sort key
         p["proj_additional"] = round(proj_add, 1)
         p["proj_total"] = round(p["goals"] + proj_add, 1)
+        # whole-goal ranges — what actually gets shown (no fractional goals)
+        p["proj_add_low"], p["proj_add_high"] = lo, hi
+        p["proj_total_low"] = p["goals"] + lo
+        p["proj_total_high"] = p["goals"] + hi
     return board
 
 
