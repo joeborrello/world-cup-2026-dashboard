@@ -181,6 +181,8 @@ pm2 restart worldcup-2026
 
 No manual migration step is needed: the schema (`db.init_schema`, all `CREATE TABLE IF NOT EXISTS`) is re-applied on app startup **and** at the top of every `update_results.py` cron run, so a new table — e.g. `scorers` for the Golden Boot tracker — is created on the existing production DB and back-filled by the next updater pass. Pull, restart, done.
 
+**This deploy is now automatic.** A short pm2 cron (`worldcup-2026-deploy`, running `deploy.py` every 5 minutes) fast-forwards the live checkout to `origin/main` and restarts the web app whenever something new lands — so merging to `main` *is* deploying, within a few minutes, with no SSH step to forget. It is a no-op when already current and **only ever fast-forwards** (a dirty or diverged tree blocks the deploy loudly rather than discarding work). This safety net was added after the Golden Boot tracker reached `main` twice without reaching the live app. Register it once with `pm2 start ecosystem.config.js && pm2 save`; run `python deploy.py` by hand any time to deploy immediately.
+
 ### Configuration (`.env`)
 
 All keys are **optional** — the dashboard renders fully from seeded data without any of them.
