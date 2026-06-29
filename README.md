@@ -168,6 +168,19 @@ python update_results.py       # optional: pull current scores
 python app.py                  # dev server
 ```
 
+### Deploying to the droplet
+
+The live app at `/var/www/worldcup-2026` tracks `main` under pm2 (`ecosystem.config.js`). A deploy is just:
+
+```bash
+cd /var/www/worldcup-2026
+git pull --ff-only origin main
+./venv/bin/pip install -r requirements.txt   # only if deps changed
+pm2 restart worldcup-2026
+```
+
+No manual migration step is needed: the schema (`db.init_schema`, all `CREATE TABLE IF NOT EXISTS`) is re-applied on app startup **and** at the top of every `update_results.py` cron run, so a new table — e.g. `scorers` for the Golden Boot tracker — is created on the existing production DB and back-filled by the next updater pass. Pull, restart, done.
+
 ### Configuration (`.env`)
 
 All keys are **optional** — the dashboard renders fully from seeded data without any of them.

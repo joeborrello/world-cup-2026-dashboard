@@ -47,6 +47,14 @@ app.config['PREFERRED_URL_SCHEME'] = 'https'
 app.wsgi_app = SubpathMiddleware(app.wsgi_app)
 app.jinja_env.filters['flag'] = flag
 
+# Apply the schema on startup so newly-added tables (e.g. `scorers` for the
+# Golden Boot tracker) exist on an already-seeded production DB right after a
+# pull + restart, before the updater's first cron run. Idempotent.
+with app.app_context():
+    _c = db.connect()
+    db.init_schema(_c)
+    _c.close()
+
 
 # ── data helpers ───────────────────────────────────────────────────────────
 

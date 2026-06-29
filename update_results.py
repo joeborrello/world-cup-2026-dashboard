@@ -163,6 +163,12 @@ def _update_from_football_data(conn):
 
 def main(prefer_remote=True):
     conn = db.connect()
+    # Idempotently apply the schema first so a deploy that adds a new table
+    # (e.g. `scorers` for the Golden Boot tracker) reaches an already-seeded
+    # production DB on the next cron run — pull + restart is then enough, no
+    # manual migration needed. CREATE TABLE IF NOT EXISTS makes this a no-op
+    # once the table exists.
+    db.init_schema(conn)
     a = _update_from_openfootball(conn, prefer_remote=prefer_remote)
     b = _update_from_football_data(conn)
     compute.recompute_all(conn)
