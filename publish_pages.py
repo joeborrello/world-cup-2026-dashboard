@@ -66,9 +66,11 @@ def _today(conn):
 
 def _title_odds(conn, n=5):
     try:
-        # fixed seed -> odds are stable until real results change, so the
-        # snapshot doesn't churn on Monte-Carlo noise between runs.
-        data = predict.predictions(conn, seed=2026)
+        # Use predict's shared default seed (config.PREDICT_SEED) — the same value
+        # the droplet dashboard uses — so the published title odds are byte-for-byte
+        # identical to the app's predictions tab, and stable until real results
+        # change (no churn on Monte-Carlo noise between runs). See JOE-12.
+        data = predict.predictions(conn)
     except Exception:
         return []
     top = sorted(data["teams"].items(), key=lambda kv: -kv[1]["champion"])[:n]

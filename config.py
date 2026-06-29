@@ -47,6 +47,15 @@ OPENWEATHER_API_KEY = os.environ.get('OPENWEATHER_API_KEY', '')
 # Predictions: Monte-Carlo sample count (accuracy vs. compute time; cached).
 PREDICT_SIMS = int(os.environ.get('PREDICT_SIMS', '4000'))
 
+# Predictions: fixed RNG seed so the odds are *deterministic* for a given set of
+# results. Both the droplet dashboard (/api/predictions) and the GitHub Pages
+# snapshot (publish_pages.py) read this single value, so the title odds shown in
+# both places are byte-for-byte identical instead of drifting on Monte-Carlo
+# noise (JOE-12). Set PREDICT_SEED= (empty) to opt back into non-deterministic
+# sampling.
+_seed_env = os.environ.get('PREDICT_SEED', '2026').strip()
+PREDICT_SEED = int(_seed_env) if _seed_env else None
+
 # Dixon-Coles low-score correction (draw realism). rho<0 lifts the draw rate;
 # 0 disables it (plain independent Poisson). See predict.DRAW_RHO.
 PREDICT_DRAW_RHO = float(os.environ.get('PREDICT_DRAW_RHO', '-0.12'))
