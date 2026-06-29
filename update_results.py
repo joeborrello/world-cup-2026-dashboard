@@ -118,6 +118,12 @@ def _update_from_football_data(conn):
 
     changed = 0
     for fx in payload.get("matches", []):
+        # football-data.org populates score.fullTime with the *live running*
+        # score while a match is IN_PLAY/PAUSED — it is only the final result
+        # once status is FINISHED. Marking anything else as finished advanced the
+        # bracket prematurely (e.g. South Africa shown as beating Canada mid-game).
+        if fx.get("status") != "FINISHED":
+            continue
         ft = (fx.get("score") or {}).get("fullTime") or {}
         if ft.get("home") is None or ft.get("away") is None:
             continue
