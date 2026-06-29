@@ -16,6 +16,7 @@ from flask import Flask, jsonify, render_template, request
 import alerts
 import config
 import db
+import goldenboot
 import live
 import predict
 import publish_pages
@@ -506,6 +507,32 @@ def api_pundits_budget():
 @app.route('/predictions')
 def predictions_page():
     return render_template('predictions.html')
+
+
+# ── golden boot ──────────────────────────────────────────────────────────────
+def _golden_boot_payload(conn):
+    """Tracker data with a flag code attached to every contender (for the UI)."""
+    data = goldenboot.tracker(conn)
+    for p in data['contenders']:
+        p['code'] = flag_code(p['team'])
+    return data
+
+
+@app.route('/golden-boot')
+def golden_boot_page():
+    conn = db.connect()
+    data = _golden_boot_payload(conn)
+    conn.close()
+    return render_template('goldenboot.html', gb=data)
+
+
+@app.route('/api/golden-boot')
+def api_golden_boot():
+    """Golden Boot leaderboard + remaining-goals projection (JSON)."""
+    conn = db.connect()
+    data = _golden_boot_payload(conn)
+    conn.close()
+    return jsonify(data)
 
 
 if __name__ == '__main__':

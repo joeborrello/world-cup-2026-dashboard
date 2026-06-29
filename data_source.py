@@ -53,6 +53,32 @@ def _parse_time(date_str, time_str):
     return local, off, utc_dt.isoformat()
 
 
+def _parse_goals(mt, team1_name, team2_name):
+    """Flatten the openfootball goals1/goals2 arrays into scorer dicts.
+
+    Each goal carries the scoring player's name, the minute, and optional
+    `penalty` / `owngoal` flags. The team credited is the side the goal arrays
+    belong to (goals1 -> team1, goals2 -> team2); for an own goal that is the
+    *beneficiary* side, and the entry is flagged so the Golden Boot never credits
+    it to the named player. `team1_name`/`team2_name` are the raw feed team names
+    (real names even for finished knockout matches, where our slot is "W74").
+    """
+    out = []
+    for side, team in (("goals1", team1_name), ("goals2", team2_name)):
+        for g in mt.get(side) or []:
+            name = g.get("name")
+            if not name:
+                continue
+            out.append({
+                "team": team,
+                "player": name,
+                "minute": str(g.get("minute")) if g.get("minute") is not None else None,
+                "penalty": bool(g.get("penalty")),
+                "owngoal": bool(g.get("owngoal")),
+            })
+    return out
+
+
 def normalize(raw):
     """Turn the raw feed into a list of match dicts ready for the DB."""
     out = []
@@ -80,6 +106,7 @@ def normalize(raw):
 
         out.append({
             "num": i,
+            "goals": _parse_goals(mt, team1_slot, team2_slot),
             "stage": stage,
             "round_label": mt["round"],
             "group_letter": group_letter,

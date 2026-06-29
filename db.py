@@ -39,6 +39,15 @@ CREATE TABLE IF NOT EXISTS matches (
     status       TEXT                   -- 'scheduled' | 'finished'
 );
 
+CREATE TABLE IF NOT EXISTS scorers (
+    match_num INTEGER,                  -- FK -> matches.num the goal was scored in
+    team      TEXT,                     -- team credited with the goal on the feed
+    player    TEXT,                     -- scorer's name (openfootball goals feed)
+    minute    TEXT,                     -- "67", "45+2", etc. (kept as text)
+    penalty   INTEGER,                  -- 1 if scored from the penalty spot
+    owngoal   INTEGER                   -- 1 if an own goal (NOT a Golden Boot goal)
+);
+
 CREATE TABLE IF NOT EXISTS standings (
     group_letter TEXT,
     team         TEXT,

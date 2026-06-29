@@ -21,6 +21,7 @@ import compute
 import config
 import data_source
 import db
+import goldenboot
 
 # openfootball uses these as knockout slot placeholders until a matchup is decided.
 _THIRD_SLOT_RE = re.compile(r"^3[A-L/]+$")
@@ -58,6 +59,8 @@ def _update_from_openfootball(conn, prefer_remote=True):
                          (*params, m["num"]))
             changed += 1
     conn.commit()
+    # refresh goalscorers (Golden Boot) from the same feed we just pulled
+    goldenboot.rebuild_scorers(conn, matches)
     return changed
 
 

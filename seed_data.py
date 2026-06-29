@@ -11,6 +11,7 @@ import compute
 import config
 import data_source
 import db
+import goldenboot
 from venues import VENUES
 
 
@@ -62,6 +63,9 @@ def seed(prefer_remote=True):
         conn.execute(
             "INSERT INTO teams (name, group_letter) VALUES (?,?)", (name, g)
         )
+    # goalscorers (Golden Boot tracker) from the same openfootball feed
+    goldenboot.rebuild_scorers(conn, matches)
+
     conn.commit()
 
     # derive standings + bracket
