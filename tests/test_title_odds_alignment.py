@@ -5,10 +5,16 @@ The landing site (publish_pages.py) and the dashboard's predictions tab
 used to disagree slightly: the snapshot pinned a fixed RNG seed while the app
 ran un-seeded, so the two agreed only to within sampling noise.
 
+The droplet app is the single source of truth: its Monte-Carlo engine
+(predict.predictions) holds finished results fixed and adjusts ratings by actual
+in-tournament outcomes (ratings.dynamic_ratings), and the GitHub Pages landing
+strip pulls those odds from the droplet (/api/landing), so the two surfaces show
+the same numbers by construction.
+
 The fix routes both through a single shared default seed (config.PREDICT_SEED,
 exposed as predict.SEED), making the odds deterministic and therefore *identical*
-in both places for a given result set. These tests pin that down so it can't
-silently regress.
+in both places for a given result set. Both surfaces also render the odds to one
+decimal place of precision. These tests pin that down so it can't silently regress.
 """
 
 import config
@@ -77,6 +83,34 @@ def test_app_and_snapshot_title_odds_match():
         # the snapshot rounds to 4dp; the app exposes the raw probability
         assert team in app_teams
         assert round(app_teams[team]["champion"], 4) == published
+
+
+def _one_decimal_pct(champion):
+    """How both web pages render a champion probability: a percentage to one
+    decimal place (predictions.js `(x*100).toFixed(1)`, landing `(o.champion*100)
+    .toFixed(1)`). Mirrored here so the data-precision contract is testable."""
+    return f"{champion * 100:.1f}%"
+
+
+def test_one_decimal_display_matches_between_surfaces():
+    """Both pages show title odds to one decimal place. The landing snapshot
+    rounds the probability to 4dp while the app exposes the raw float; verify
+    that rounding never changes the one-decimal-percent string, so the two
+    surfaces display *identical* odds (not merely close)."""
+    conn = _fresh_conn()
+    try:
+        _clear_cache()
+        snapshot = publish_pages._title_odds(conn, n=5)
+        app_teams = predict.predictions(conn)["teams"]
+    finally:
+        conn.close()
+
+    assert snapshot, "snapshot should list title odds"
+    for entry in snapshot:
+        team = entry["team"]
+        # snapshot value (4dp) vs the app's raw value, both as shown to the user
+        assert _one_decimal_pct(entry["champion"]) == _one_decimal_pct(
+            app_teams[team]["champion"]), team
 
 
 def test_snapshot_is_top_n_by_champion():
