@@ -3,7 +3,9 @@
 (function () {
   const flag = (code, name) => code
     ? `<img class="flag-img" src="https://flagcdn.com/${code}.svg" alt="${name || ''}" width="22" height="16"> ` : '';
-  const pct = x => (x * 100).toFixed(x >= 0.095 ? 0 : 1) + '%';
+  // Odds are always shown to one decimal place of precision, matching the
+  // GitHub Pages landing strip (both read the droplet's Monte-Carlo odds). See JOE-12.
+  const pct = x => (x * 100).toFixed(1) + '%';
 
   fetch(window.WC.predUrl).then(r => r.json()).then(render);
 

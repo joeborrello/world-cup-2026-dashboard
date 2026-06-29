@@ -30,6 +30,12 @@ import ratings
 
 SIMS = getattr(config, "PREDICT_SIMS", 8000)
 
+# Default RNG seed. A fixed seed makes the Monte-Carlo odds deterministic for a
+# given result set, so the droplet dashboard and the GitHub Pages snapshot show
+# *identical* title odds rather than values that merely agree to within sampling
+# noise (JOE-12). Callers can still pass an explicit seed (e.g. tests) to override.
+SEED = getattr(config, "PREDICT_SEED", 2026)
+
 # Dixon-Coles low-score dependence parameter. Independent Poisson under-produces
 # draws; this reweights the four lowest scorelines (0-0/1-1 up, 1-0/0-1 down) to
 # add the correlation real football shows. rho<0 lifts the draw rate; -0.12 takes
@@ -475,6 +481,8 @@ def _aggregate_cached(conn, sims, seed):
 def predictions(conn, sims=None, seed=None):
     """Per-team odds + the default (un-manipulated) projected bracket."""
     sims = sims or SIMS
+    if seed is None:
+        seed = SEED                         # shared default -> deterministic odds
     agg = _aggregate_cached(conn, sims, seed)
     slots, _ = _project(agg, {})
     return {"sims": agg["sims"], "n_finished": agg["n_finished"],
@@ -489,6 +497,8 @@ def projected_bracket(conn, overrides=None, sims=None, seed=None):
     (the forced team isn't in that match) are dropped from the returned
     `overrides` so the client can stay in sync."""
     sims = sims or SIMS
+    if seed is None:
+        seed = SEED                         # shared default -> deterministic odds
     agg = _aggregate_cached(conn, sims, seed)
     slots, applied = _project(agg, _norm_overrides(overrides))
     return {"sims": agg["sims"], "n_finished": agg["n_finished"],

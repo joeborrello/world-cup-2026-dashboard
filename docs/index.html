@@ -260,7 +260,7 @@
     document.getElementById('lsOdds').innerHTML = odds.length
       ? '<span class="ls-label">Title odds</span>' + odds.map(function (o) {
           return '<span class="o">' + flag(o.code, o.team) + o.team +
-            ' <b>' + Math.round(o.champion * 100) + '%</b></span>';
+            ' <b>' + (o.champion * 100).toFixed(1) + '%</b></span>';
         }).join('')
       : '';
     strip.hidden = false;
