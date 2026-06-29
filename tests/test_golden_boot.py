@@ -289,3 +289,43 @@ def test_js_resorts_between_now_and_projected():
     assert 'data-proj' in js
     assert 'data-goals' in js
     assert 'by-proj' in js
+
+
+# ── deploy self-heal (JOE-13 revision) ──────────────────────────────────────
+# The Golden Boot feature added a new `scorers` table. On an already-seeded
+# production DB, pulling the code is not enough — the table has to be created,
+# and the updater's wholesale `DELETE FROM scorers` rebuild would otherwise
+# crash with "no such table: scorers". These guard that a plain pull + restart
+# brings the feature up on an existing DB, with no manual migration.
+
+def test_app_import_applies_schema(conn):
+    """Importing the app (gunicorn startup) creates the scorers table."""
+    # `flask_app` is imported at module load; the table must exist by now.
+    names = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table'")}
+    assert 'scorers' in names
+
+
+def test_updater_recreates_and_repopulates_scorers(conn):
+    """Simulate an old production DB: drop `scorers`, run the offline updater,
+    and confirm it self-heals the schema and refills the table."""
+    import update_results
+
+    conn.execute("DROP TABLE IF EXISTS scorers")
+    conn.commit()
+    assert not conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='table' AND name='scorers'"
+    ).fetchone()
+
+    # Offline: reads the committed openfootball snapshot, no network.
+    update_results.main(prefer_remote=False)
+
+    # Fresh connection — the updater used its own.
+    c2 = db.connect()
+    try:
+        assert c2.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='scorers'"
+        ).fetchone()
+        assert c2.execute("SELECT COUNT(*) FROM scorers").fetchone()[0] > 0
+    finally:
+        c2.close()
