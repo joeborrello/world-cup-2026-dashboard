@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>World Cup 2026 Dashboard</title>
-<meta name="description" content="A live dashboard for the 2026 FIFA World Cup — bracket, group tables, interactive maps, match-day weather, a live score ticker, and an Elo prediction engine with an AI pundit panel.">
+<meta name="description" content="A live dashboard for the 2026 FIFA World Cup — bracket, group tables, interactive maps, match-day weather, a live score ticker, a Golden Boot tracker, and an Elo prediction engine with a steerable projected bracket and an AI pundit panel.">
 <link rel="icon" type="image/svg+xml" href="favicon.svg">
 <style>
   :root{
@@ -93,8 +93,9 @@
     <span class="badge">⚽ 48 teams · 16 cities · 104 matches</span>
     <h1>World Cup 2026 Dashboard</h1>
     <p class="lead">Follow the 2026 FIFA World Cup in one place — a live bracket and group tables,
-      three interactive maps, match-day weather, a live score ticker, and a form-aware Elo prediction
-      engine with an AI pundit panel — all shown in your device's local time.</p>
+      three interactive maps, match-day weather, a live score ticker, a Golden Boot tracker, and a
+      form-aware Elo prediction engine — with a steerable projected bracket and an AI pundit panel —
+      all shown in your device's local time.</p>
     <div class="hosts">🇨🇦 Canada &nbsp;·&nbsp; 🇺🇸 United States &nbsp;·&nbsp; 🇲🇽 Mexico &nbsp;—&nbsp; Jun 11 – Jul 19, 2026</div>
     <div class="cta">
       <a class="btn btn-primary" href="https://droplet.josephborrello.com/worldcup/">Open the live dashboard →</a>
@@ -126,13 +127,17 @@
       <a class="card" href="https://droplet.josephborrello.com/worldcup/map"><div class="ico">🗺️</div><h3>Daily map</h3>
         <p>A day slider lights up each day's venues with country-flag pins and click-through match detail.</p></a>
       <a class="card" href="https://droplet.josephborrello.com/worldcup/team-map"><div class="ico">🧭</div><h3>Follow-a-team map</h3>
-        <p>Trace any team's journey with date-gradient pins, gradient path lines and directional arrows.</p></a>
+        <p>Trace any team's journey with date-gradient pins, gradient path lines, directional arrows and per-match kickoff weather.</p></a>
       <a class="card" href="https://droplet.josephborrello.com/worldcup/map"><div class="ico">🌦️</div><h3>Match-day weather</h3>
         <p>Live radar, isobars and advisories; temperature + precipitation forecasts; historical conditions for past games. °F/°C toggle and a national heat map.</p></a>
       <a class="card" href="https://droplet.josephborrello.com/worldcup/"><div class="ico">🔴</div><h3>Live score ticker</h3>
-        <p>When a match is in progress, the live score shows up on every page.</p></a>
+        <p>When a match is in progress, the live score — and the minute of play as of the last check — shows up on every page, refreshed every 5 minutes.</p></a>
       <a class="card" href="https://droplet.josephborrello.com/worldcup/predictions"><div class="ico">🎲</div><h3>Prediction engine</h3>
         <p>An Elo Monte-Carlo simulator — with form-adjusting ratings and a Dixon–Coles draw model — projects title odds, qualification odds and a single consistent projected bracket, depth-selectable from R32 to the Final.</p></a>
+      <a class="card" href="https://droplet.josephborrello.com/worldcup/predictions"><div class="ico">🕹️</div><h3>Interactive bracket</h3>
+        <p>Steer the projected knockouts: click any team to force it through, and the bracket re-walks every slot it feeds — play out your own what-if run, then reset in one tap.</p></a>
+      <a class="card" href="https://droplet.josephborrello.com/worldcup/golden-boot"><div class="ico">👟</div><h3>Golden Boot tracker</h3>
+        <p>The top-scorer race — penalties count, own goals don't — with a projected whole-goal range of additional goals scaled by how far each striker's team is simulated to go.</p></a>
       <a class="card" href="https://droplet.josephborrello.com/worldcup/predictions"><div class="ico">📈</div><h3>Form tracker</h3>
         <p>Team ratings start from a prior and adapt to in-tournament results — a live board of the biggest risers and fallers.</p></a>
       <a class="card" href="https://droplet.josephborrello.com/worldcup/predictions"><div class="ico">📐</div><h3>Transparent methodology</h3>
@@ -174,6 +179,14 @@
         <p>A Dixon–Coles draw correction for realism, and dynamic Elo that adapts to results — surfaced as a Form tracker of risers and fallers.</p></div>
       <div class="step"><div class="tag">Stage 12 · Polish</div><h4>Local time for every visitor</h4>
         <p>Kickoff times and the "today" schedule now follow each device's own timezone.</p></div>
+      <div class="step"><div class="tag">Stage 13 · Predictions</div><h4>Steerable projected bracket</h4>
+        <p>In Projected mode, click any team to force it through its match — the bracket re-walks every slot it feeds, so you can play out what-if runs. Resolved Round-of-32 teams are pickable too, with a lock badge and a one-tap "Reset picks". Per-slot confidence stays the honest simulation marginal.</p></div>
+      <div class="step"><div class="tag">Stage 14 · Predictions</div><h4>Golden Boot tracker</h4>
+        <p>A top-scorer race off the keyless goals feed — penalties count, own goals don't — flagging everyone within two of the lead as in contention. Each contender gets a projected whole-goal range of additional goals, scaled by how deep their team is simulated to go. Re-rank by current goals or projected finish.</p></div>
+      <div class="step"><div class="tag">Stage 15 · Maps</div><h4>Kickoff weather on the team map</h4>
+        <p>The follow-a-team map now shows each match's kickoff weather too — actual conditions for games played, forecast for those upcoming — sharing one formatter with the daily map.</p></div>
+      <div class="step"><div class="tag">Stage 16 · Live</div><h4>Faster refresh &amp; minute of play</h4>
+        <p>Live scores refresh every 5 minutes, and the ticker shows the minute of play as of the most recent check — football-data's own minute when present, otherwise estimated from kickoff.</p></div>
     </div>
   </div>
 </section>
