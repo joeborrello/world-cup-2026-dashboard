@@ -102,6 +102,7 @@ def _match_dict(m, venues):
         'ground': m['ground'], 'stadium': v.get('stadium'),
         'city': v.get('city'), 'country': v.get('country'),
         'lat': v.get('lat'), 'lng': v.get('lng'), 'tz': v.get('tz'),
+        'roof': v.get('roof'),
     }
 
 
