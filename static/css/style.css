@@ -371,6 +371,8 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
 .tp-band:last-child { border-radius: 0 0 7px 7px; }
 .tp-band:only-child { border-radius: 7px; }
 .tp-band .fp-v { color: #fff; text-shadow: 0 1px 1px rgba(0, 0, 0, .45); }
+/* kickoff-weather chip sits on the saturated date band -> white for contrast */
+.tp-band .wx { color: #fff; text-shadow: 0 1px 1px rgba(0, 0, 0, .5); }
 
 /* directional arrows along the route line */
 .rt-arrow-wrap { background: none; border: none; }

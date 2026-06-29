@@ -127,34 +127,33 @@ def _at_hour(hourly, utc_dt_iso):
     }
 
 
-def weather_for_date(conn, date_str):
-    """Per-match kickoff weather for every match on ``date_str``.
-
-    Returns {match_num: {...weather, kind, available}}.  ``kind`` is
-    'forecast' | 'current' | 'historical' for UI labeling.
-    """
-    rows = conn.execute("""
-        SELECT m.num, m.ground, m.utc_datetime, v.lat, v.lng
-        FROM matches m JOIN venues v ON v.ground = m.ground
-        WHERE m.date = ? AND v.lat IS NOT NULL""", (date_str,)).fetchall()
-    if not rows:
-        return {}
-
+def _kind_for(date_str):
+    """'historical' (already played) | 'current' (today) | 'forecast' (future)."""
     ahead = _days_ahead(date_str)
-    kind = "historical" if ahead < 0 else "current" if ahead == 0 else "forecast"
+    return "historical" if ahead < 0 else "current" if ahead == 0 else "forecast"
+
+
+def _weather_for_rows(conn, rows):
+    """Per-match kickoff weather for arbitrary match rows.
+
+    Each row needs num, ground, date, utc_datetime, lat, lng. ``kind`` is derived
+    per match from its own date, so a mixed set spanning several days (e.g. a
+    single team's whole run) gets the right forecast/current/historical label on
+    each match. Hourly fetches are deduped per (ground, date) within the batch.
+    """
     out = {}
-
-    if ahead > FORECAST_HORIZON_DAYS:           # beyond the forecast horizon
-        for r in rows:
-            out[r["num"]] = {"available": False, "kind": kind}
-        return out
-
-    hourly_by_ground = {}
+    hourly_by_key = {}
     for r in rows:
-        g = r["ground"]
-        if g not in hourly_by_ground:
-            hourly_by_ground[g] = _venue_hourly(conn, g, r["lat"], r["lng"], date_str)
-        hourly = hourly_by_ground[g]
+        date_str = r["date"]
+        kind = _kind_for(date_str)
+        if _days_ahead(date_str) > FORECAST_HORIZON_DAYS:   # beyond forecast horizon
+            out[r["num"]] = {"available": False, "kind": kind}
+            continue
+        key = (r["ground"], date_str)
+        if key not in hourly_by_key:
+            hourly_by_key[key] = _venue_hourly(
+                conn, r["ground"], r["lat"], r["lng"], date_str)
+        hourly = hourly_by_key[key]
         w = _at_hour(hourly, r["utc_datetime"]) if hourly else None
         if w:
             w.update(available=True, kind=kind)
@@ -162,3 +161,34 @@ def weather_for_date(conn, date_str):
         else:
             out[r["num"]] = {"available": False, "kind": kind}
     return out
+
+
+def weather_for_date(conn, date_str):
+    """Per-match kickoff weather for every match on ``date_str`` (the daily map).
+
+    Returns {match_num: {...weather, kind, available}}.  ``kind`` is
+    'forecast' | 'current' | 'historical' for UI labeling.
+    """
+    rows = conn.execute("""
+        SELECT m.num, m.ground, m.date, m.utc_datetime, v.lat, v.lng
+        FROM matches m JOIN venues v ON v.ground = m.ground
+        WHERE m.date = ? AND v.lat IS NOT NULL""", (date_str,)).fetchall()
+    return _weather_for_rows(conn, rows)
+
+
+def weather_for_nums(conn, nums):
+    """Per-match kickoff weather for a specific set of match numbers.
+
+    Used by the follow-a-team map, whose visible matches span many dates and
+    venues: each gets its own forecast/current/historical reading at kickoff.
+    Returns {match_num: {...weather, kind, available}}.
+    """
+    nums = [n for n in nums if n is not None]
+    if not nums:
+        return {}
+    placeholders = ",".join("?" * len(nums))
+    rows = conn.execute(f"""
+        SELECT m.num, m.ground, m.date, m.utc_datetime, v.lat, v.lng
+        FROM matches m JOIN venues v ON v.ground = m.ground
+        WHERE m.num IN ({placeholders}) AND v.lat IS NOT NULL""", nums).fetchall()
+    return _weather_for_rows(conn, rows)

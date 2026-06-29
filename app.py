@@ -307,7 +307,22 @@ def api_matches():
 
 @app.route('/api/weather')
 def api_weather():
-    """Per-match kickoff weather for a given date (forecast / current / historical)."""
+    """Per-match kickoff weather (forecast / current / historical).
+
+    ``?date=YYYY-MM-DD`` returns every match that day (daily map); ``?nums=1,2,3``
+    returns just those matches, which may span many days (follow-a-team map).
+    """
+    nums = request.args.get('nums')
+    if nums:
+        wanted = []
+        for tok in nums.split(','):
+            tok = tok.strip()
+            if tok.isdigit():
+                wanted.append(int(tok))
+        conn = db.connect()
+        data = weather.weather_for_nums(conn, wanted)
+        conn.close()
+        return jsonify(data)
     d = request.args.get('date')
     if not d:
         return jsonify({})
