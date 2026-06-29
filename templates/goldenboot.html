@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Golden Boot · World Cup 2026{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <h1>Golden Boot race</h1>
+  <p class="subtle">Who's in contention to finish as the tournament's top scorer — with a
+    projection of the goals each contender is on course to add. Penalties count; own goals
+    don't. Projected totals carry each player's scoring rate over the matches their team is
+    still expected to play, from the
+    <a href="{{ url_for('predictions_page') }}">Monte-Carlo model</a>.</p>
+</section>
+
+{% if gb.contenders %}
+<div class="gb-meta" id="gbMeta">
+  {% set leaders = gb.contenders | selectattr('rank', 'equalto', 1) | list %}
+  <span class="gb-leadwrap">
+    🥇
+    {% for p in leaders %}
+      <span class="gb-leader"><span class="flag">{{ p.team | flag }}</span>{{ p.player }}</span>{% if not loop.last %}, {% endif %}
+    {% endfor %}
+    leading on <strong>{{ gb.leader_goals }}</strong> goal{{ '' if gb.leader_goals == 1 else 's' }}
+  </span>
+  <span class="gb-sub">{{ gb.contenders | length }} scorer{{ '' if gb.contenders|length == 1 else 's' }}
+    · {{ gb.total_goals }} goals · {{ gb.n_finished }} match{{ '' if gb.n_finished == 1 else 'es' }} played</span>
+</div>
+
+<div class="gb-controls">
+  <span class="gb-toggle-label">Rank by</span>
+  <div class="gb-toggle" role="tablist">
+    <button type="button" id="gbSortNow" class="gb-tab active" data-sort="now">Goals now</button>
+    <button type="button" id="gbSortProj" class="gb-tab" data-sort="proj">Projected total</button>
+  </div>
+</div>
+
+<div class="gb-wrap">
+  <table class="gb-table" id="gbTable">
+    <thead>
+      <tr>
+        <th class="pos">#</th>
+        <th class="who">Player</th>
+        <th class="team">Team</th>
+        <th class="num" title="Goals so far (penalties counted)">Goals</th>
+        <th class="num pen" title="Of which from the penalty spot">Pens</th>
+        <th class="num proj" title="Projected additional goals over the team's expected remaining matches">Proj +</th>
+        <th class="num projtot" title="Projected final tally (goals now + projected additional)">Proj total</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for p in gb.contenders %}
+      <tr class="gb-row{% if p.in_contention %} contention{% endif %}{% if p.rank == 1 %} leader{% endif %}"
+          data-goals="{{ p.goals }}" data-proj="{{ p.proj_total }}" data-player="{{ p.player }}">
+        <td class="pos" data-rank="{{ p.rank }}">{{ p.rank }}</td>
+        <td class="who"><span class="flag">{{ p.team | flag }}</span><span class="name">{{ p.player }}</span>
+          {%- if p.in_contention %} <span class="cbadge" title="Within {{ gb.contention_gap }} of the lead">in contention</span>{% endif %}</td>
+        <td class="team">{{ p.team }}</td>
+        <td class="num goals">{{ p.goals }}</td>
+        <td class="num pen">{{ p.penalties or '–' }}</td>
+        <td class="num proj">{% if p.proj_additional %}+{{ p.proj_additional }}{% else %}–{% endif %}</td>
+        <td class="num projtot">{{ p.proj_total }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+<p class="subtle gb-note">Projection = a goals-per-match rate × the team's expected remaining matches.
+  The rate is regressed toward a modest prior early on (so a hot opening game doesn't project a
+  record-shattering tally) and sharpens as more matches are played. It's a transparent estimate, not a
+  per-player model — a striker on a team projected deep into the knockouts is credited more upside than
+  one likely to bow out early.</p>
+{% else %}
+<div class="gb-empty">
+  <p class="big">No goals yet ⚽</p>
+  <p class="subtle">The Golden Boot race opens with the first goal of the tournament.
+    Check back once the matches kick off.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script src="{{ url_for('static', filename='js/goldenboot.js') }}"></script>
+{% endblock %}
