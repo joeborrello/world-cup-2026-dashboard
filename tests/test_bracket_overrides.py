@@ -148,24 +148,27 @@ def test_invalid_override_is_dropped(conn):
 # `locked`) is just as steerable as a projected one.
 
 def test_resolved_r32_matches_are_overridable_not_locked(conn):
-    """Every R32 match with both real teams known but unplayed must be
+    """Every R32 match with both real teams known but *unplayed* must be
     overridable: `locked` is False (only finished matches lock), so the engine
     accepts a forced winner. This is the exact state the R32 column is in once the
-    groups finish — the case the original UI couldn't select."""
+    groups finish — the case the original UI couldn't select. A finished R32 match
+    (one whose result is settled) is correctly `locked` and is excluded here; that
+    other half of the contract is covered by
+    test_finished_knockout_match_is_locked_and_not_overridable."""
     base = predict.projected_bracket(conn, {}, sims=SIMS, seed=SEED)['slots']
     r32 = {n: e for n, e in base.items() if e['round'] == 'r32'}
     assert r32, 'sanity: projection should include R32 slots'
-    resolved = [(n, e) for n, e in r32.items() if e['team1'] and e['team2']]
-    assert resolved, 'sanity: at least one R32 match should have both teams known'
-    for num, e in resolved:
-        assert not e.get('locked'), f'unplayed R32 match #{num} must not be locked'
+    # only resolved *and not yet played* matches are steerable
+    resolved = [(n, e) for n, e in r32.items()
+                if e['team1'] and e['team2'] and not e.get('locked')]
+    assert resolved, 'sanity: at least one unplayed R32 match should have both teams known'
 
-    # forcing either competitor in such a match must take effect (be echoed back)
-    num, e = resolved[0]
-    t2 = e['team2']['team']
-    out = predict.projected_bracket(conn, {num: t2}, sims=SIMS, seed=SEED)
-    assert out['overrides'].get(num) == t2, \
-        'a resolved-but-unplayed R32 match must accept a forced winner'
+    # forcing either competitor in any such match must take effect (be echoed back)
+    for num, e in resolved:
+        t2 = e['team2']['team']
+        out = predict.projected_bracket(conn, {num: t2}, sims=SIMS, seed=SEED)
+        assert out['overrides'].get(num) == t2, \
+            f'resolved-but-unplayed R32 match #{num} must accept a forced winner'
 
 
 def test_js_makes_resolved_sides_clickable_not_just_tbd():
@@ -198,6 +201,75 @@ def test_pick_hint_explains_round_of_32_is_clickable(client):
     html = client.get('/bracket').get_data(as_text=True).lower()
     assert 'round of 32' in html
     assert 'qualified' in html
+
+
+# ── JOE-11 revision: EVERY unplayed match adjustable; played ones are not ────
+# Reviewer follow-up: "not all of the other matches allow either team to be
+# selected to advance… make sure users can adjust any and all matches that
+# haven't already happened. Once a match has happened it should no longer be
+# adjustable." These pin that contract down at the engine level for the whole
+# bracket, not just one sampled match.
+
+def test_every_unplayed_resolved_match_accepts_either_team(conn):
+    """For EVERY knockout match that is resolved (both competitors known) and not
+    yet finished, forcing *either* side must take effect. This is the literal
+    requirement: any not-yet-played match is adjustable to either outcome."""
+    base = predict.projected_bracket(conn, {}, sims=SIMS, seed=SEED)['slots']
+    open_matches = [(n, e) for n, e in base.items()
+                    if e['team1'] and e['team2'] and not e.get('locked')]
+    assert open_matches, 'sanity: there should be open knockout matches to steer'
+    for num, e in open_matches:
+        for side in ('team1', 'team2'):
+            team = e[side]['team']
+            out = predict.projected_bracket(conn, {num: team}, sims=SIMS, seed=SEED)
+            assert out['overrides'].get(num) == team, (
+                f'forcing {team} to advance from match #{num} ({side}) must take '
+                f'effect — every unplayed match must be adjustable to either team')
+
+
+def test_finished_knockout_match_is_locked_and_not_overridable(conn):
+    """The other half of the contract: once a knockout match has been *played*,
+    its result is settled and must be neither marked steerable (`locked` True) nor
+    overridable. We temporarily finish an R32 match to exercise the lock path
+    (none are finished in the seed data) and restore it afterwards."""
+    base = predict.projected_bracket(conn, {}, sims=SIMS, seed=SEED)['slots']
+    num, t1, t2 = _resolved_r32(base)
+    orig = conn.execute(
+        "SELECT status, score1, score2 FROM matches WHERE num=?", (num,)).fetchone()
+    try:
+        # play the match: t1 beats t2 (team1/team2 in the row are the real teams)
+        conn.execute(
+            "UPDATE matches SET status='finished', score1=2, score2=0 WHERE num=?",
+            (num,))
+        conn.commit()
+        out = predict.projected_bracket(conn, {num: t2}, sims=SIMS, seed=SEED)
+        assert out['slots'][num].get('locked') is True, \
+            'a finished match must report locked=True so the UI stays read-only'
+        assert num not in out['overrides'], \
+            'a finished match must refuse a forced winner (its result is settled)'
+        # the actual on-pitch winner stands regardless of the attempted override
+        assert out['slots'][num]['team1']['team'] == t1
+    finally:
+        conn.execute(
+            "UPDATE matches SET status=?, score1=?, score2=? WHERE num=?",
+            (orig['status'], orig['score1'], orig['score2'], num))
+        conn.commit()
+
+
+def test_static_assets_are_cache_busted(client):
+    """A deploy that ships a fixed bracket.js must not be masked by a browser
+    still running the cached old copy — every static URL carries a ?v=<mtime>
+    cache-buster so a new script always wins. (The previous fix only "didn't
+    take" for a user whose browser kept the stale script.)"""
+    html = client.get('/bracket').get_data(as_text=True)
+    import re as _re
+    statics = _re.findall(r'(?:href|src)="([^"]*static[^"]*)"', html)
+    assert statics, 'bracket page should reference static assets'
+    js = [u for u in statics if 'bracket.js' in u]
+    assert js and '?v=' in js[0], \
+        f'bracket.js must be cache-busted with ?v=, got {js}'
+    for u in statics:
+        assert '?v=' in u, f'static asset not cache-busted: {u}'
 
 
 def test_predictions_backcompat(conn):
