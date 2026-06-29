@@ -49,7 +49,7 @@ Match-day weather on the daily map: **live radar** (RainViewer), **isobars** (Op
 A **°F / °C toggle**, a **nationwide temperature heat map** overlay, a **numeric range legend** on the color bar, and per-venue **humidity + dewpoint**. (Includes a fix for West-Coast late kickoffs that fall into the next UTC day.)
 
 ### Stage 7 — Live score ticker
-When one of today's matches is being played, the **live score appears on every page** via a shared ticker (estimated minute omitted — only authoritative state is shown).
+When one of today's matches is being played, the **live score appears on every page** via a shared ticker, alongside the **minute of play as of the most recent check** (JOE-17) — football-data's own minute when the feed carries one, otherwise estimated from kickoff. It's a snapshot (labelled with the check time), not a browser-side ticking clock; half-time shows as "HT".
 
 ### Stage 8 — Prediction engine
 A pure-stdlib **Elo Monte-Carlo** simulator (`ratings.py` + `predict.py`) plays out the rest of the tournament thousands of times, holding finished results fixed: a Poisson goals model derives expected scorelines from the Elo gap, standings are rebuilt with the *same* FIFA tiebreaker code as the live path, third-place slots are allocated, and each knockout round is simulated to the Final. Surfaced as a **Predictions** page (title + qualification odds) and an **Actual / Projected** toggle plus **depth selector** on the bracket. Predictions are computed read-only — hypothetical teams are never written to the live `matches` table.
