@@ -104,8 +104,14 @@ def test_forcing_underdog_carries_it_downstream(conn):
     forced = out['slots']
     feed = _downstream_of(base, num, default_winner)
     assert feed, 'sanity: default winner should feed a later match'
-    # the forced underdog now occupies the slots the default winner used to.
-    assert _downstream_of(forced, num, underdog) == feed
+    # The forced underdog must advance into the *immediate* next match the default
+    # winner used to feed, and the default winner must no longer appear anywhere
+    # downstream. We don't require the underdog to occupy *every* slot the default
+    # winner once reached: the underdog can lose a later round, so the slots beyond
+    # the next match get re-resolved to whoever wins there (correct engine
+    # behaviour — asserting full equality made this test brittle).
+    underdog_feed = _downstream_of(forced, num, underdog)
+    assert feed[0] in underdog_feed, 'underdog must advance into the next match'
     assert _downstream_of(forced, num, default_winner) == []
 
 
@@ -131,6 +137,67 @@ def test_invalid_override_is_dropped(conn):
         conn, {num: 'Atlantis', 99999: t1}, sims=SIMS, seed=SEED)
     assert num not in out['overrides']
     assert 99999 not in out['overrides']
+
+
+# ── JOE-11: resolved-but-unplayed R32 matches are steerable ─────────────────
+# Once the groups are decided, every Round-of-32 pairing holds two *real*
+# qualified teams, yet the match hasn't been played. The bracket template renders
+# those sides WITHOUT the `tbd` class, and the old projection code only made
+# `tbd` sides clickable — so the entire R32 column swallowed clicks and nothing
+# could be picked. The fix: a resolved side whose match isn't finished (not
+# `locked`) is just as steerable as a projected one.
+
+def test_resolved_r32_matches_are_overridable_not_locked(conn):
+    """Every R32 match with both real teams known but unplayed must be
+    overridable: `locked` is False (only finished matches lock), so the engine
+    accepts a forced winner. This is the exact state the R32 column is in once the
+    groups finish — the case the original UI couldn't select."""
+    base = predict.projected_bracket(conn, {}, sims=SIMS, seed=SEED)['slots']
+    r32 = {n: e for n, e in base.items() if e['round'] == 'r32'}
+    assert r32, 'sanity: projection should include R32 slots'
+    resolved = [(n, e) for n, e in r32.items() if e['team1'] and e['team2']]
+    assert resolved, 'sanity: at least one R32 match should have both teams known'
+    for num, e in resolved:
+        assert not e.get('locked'), f'unplayed R32 match #{num} must not be locked'
+
+    # forcing either competitor in such a match must take effect (be echoed back)
+    num, e = resolved[0]
+    t2 = e['team2']['team']
+    out = predict.projected_bracket(conn, {num: t2}, sims=SIMS, seed=SEED)
+    assert out['overrides'].get(num) == t2, \
+        'a resolved-but-unplayed R32 match must accept a forced winner'
+
+
+def test_js_makes_resolved_sides_clickable_not_just_tbd():
+    """The root JOE-11 bug: only `tbd` sides were made interactive, so R32 sides
+    holding already-qualified teams (no `tbd` class) couldn't be picked. The fix
+    keys interactivity off `locked` instead of `tbd`, marks resolved sides
+    `decided`, and only outlines a box that actually has a pickable side."""
+    js = _read('static', 'js', 'bracket.js')
+    # interactivity now gates on the match being locked, not on the side being tbd
+    assert 'if (!tbd && e.locked) return' in js
+    # the old tbd-only gate that swallowed R32 clicks must not come back
+    assert "!side.classList.contains('tbd')) return" not in js
+    # resolved (already-qualified) sides get the `decided` marker so they stay
+    # clickable but render upright (no italics / trivial 100% badge)
+    assert "add('decided')" in js
+    # a box is only outlined as steerable when it actually has a pickable side
+    assert 'if (pickable)' in js
+
+
+def test_css_keeps_decided_sides_upright():
+    """A `decided` side is a real qualified team, not a guess — it must render
+    upright (override the projected italics) so it doesn't read as a prediction."""
+    css = _read('static', 'css', 'style.css')
+    assert '.bm-side.predicted.decided' in css
+
+
+def test_pick_hint_explains_round_of_32_is_clickable(client):
+    """The hint must tell the user the already-qualified R32 teams are clickable,
+    so the previously-dead R32 column reads as interactive."""
+    html = client.get('/bracket').get_data(as_text=True).lower()
+    assert 'round of 32' in html
+    assert 'qualified' in html
 
 
 def test_predictions_backcompat(conn):
