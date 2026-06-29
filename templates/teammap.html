@@ -13,8 +13,10 @@
   <h1>Follow your teams</h1>
   <p class="subtle">Pick one or more teams to trace their path across North America. Each
     match is pinned at its venue and tinted by date — earliest cool, latest warm — and a line
-    links each team's matches in order. Click a pin for kickoff time, stadium and score (times
-    in your local zone). Knockout venues join a team's path as those matchups are decided.</p>
+    links each team's matches in order. Click a pin for kickoff time, stadium, score and the
+    weather at kickoff — the actual conditions for matches already played, the forecast for those
+    still to come (times in your local zone). Knockout venues join a team's path as those matchups
+    are decided.</p>
 </section>
 
 <div class="team-bar">
@@ -41,9 +43,11 @@
     matchesUrl: "{{ url_for('api_matches') }}",
     venuesUrl: "{{ url_for('api_venues') }}",
     teamsUrl: "{{ url_for('api_teams') }}",
+    weatherUrl: "{{ url_for('api_weather') }}",
     start: "{{ start }}",
     end: "{{ end }}"
   };
 </script>
+<script src="{{ url_for('static', filename='js/wx.js') }}"></script>
 <script src="{{ url_for('static', filename='js/teammap.js') }}"></script>
 {% endblock %}

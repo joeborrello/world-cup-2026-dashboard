@@ -25,6 +25,8 @@
 
   let teams = [], matches = [];
   const selected = new Set();   // team display names being followed
+  const wxCache = {};            // match num -> kickoff weather payload (/api/weather)
+  const wxRequested = new Set(); // nums already fetched (success or not) — avoids re-asking
   const listEl = document.getElementById('teamList');
   const countEl = document.getElementById('tmCount');
   const legendEl = document.getElementById('lineLegend');
@@ -53,7 +55,8 @@
         html += `<div class="pop-match"><span class="pop-swatch" style="background:${c}"></span>` +
           `<span class="pop-when">${WCTime.datetime(m.utc_datetime)}</span><br>` +
           `<span class="pop-tag">${tag}</span> ${flagImg(m.team1_code, m.team1)}${m.team1} v ` +
-          `${flagImg(m.team2_code, m.team2)}${m.team2}${sc}</div>`;
+          `${flagImg(m.team2_code, m.team2)}${m.team2}${sc}` +
+          WCWx.line(wxCache[m.num]) + `</div>`;
       });
     return html;
   }
@@ -90,8 +93,29 @@
     }
   }
 
+  // every distinct match num currently plotted (across all followed teams)
+  function displayedNums() {
+    const nums = new Set();
+    selected.forEach(name => teamMatches(name).forEach(m => nums.add(m.num)));
+    return [...nums];
+  }
+
+  // Lazily fetch kickoff weather for the plotted matches (one batched call, deduped
+  // server-side per venue/day). Past matches come back as observed "Actual" history,
+  // future ones as forecast. On arrival, re-render in place to fill in the readings.
+  function ensureWeather() {
+    const need = displayedNums().filter(n => !wxRequested.has(n));
+    if (!need.length) return;
+    need.forEach(n => wxRequested.add(n));
+    fetch(window.WC.weatherUrl + '?nums=' + need.join(','))
+      .then(r => r.json()).catch(() => ({}))
+      .then(wx => { Object.assign(wxCache, wx); render(false); });
+  }
+
   // ── render selected teams onto the map ──────────────────────────────────────
-  function render() {
+  // `fit` re-frames the map to the plotted pins; skipped on the weather re-render so
+  // a backfilled reading doesn't yank the user's current view.
+  function render(fit = true) {
     layer.clearLayers();
 
     // route lines first (drawn beneath the pins), one per followed team
@@ -111,10 +135,11 @@
       group.sort((a, b) => (a.utc_datetime || '').localeCompare(b.utc_datetime || ''));
       const rows = group.map(m =>
         `<div class="fp-row tp-band" style="background:${dateColor(m.date)}">` +
-        `${flagImg(m.team1_code, m.team1)}<span class="fp-v">v</span>${flagImg(m.team2_code, m.team2)}</div>`
+        `${flagImg(m.team1_code, m.team1)}<span class="fp-v">v</span>${flagImg(m.team2_code, m.team2)}` +
+        `${WCWx.chip(wxCache[m.num])}</div>`
       ).join('');
       const lastC = dateColor(group[group.length - 1].date);
-      const w = 92, h = group.length * 23 + 13;
+      const w = 112, h = group.length * 23 + 13;
       const icon = L.divIcon({
         html: `<div class="fp-pin tp-pin">${rows}<i class="fp-stem" style="border-top-color:${lastC}"></i></div>`,
         className: 'fp-wrap', iconSize: [w, h], iconAnchor: [w / 2, h],
@@ -123,7 +148,9 @@
       bounds.push([v.lat, v.lng]);
     });
 
-    if (bounds.length) map.fitBounds(bounds, { padding: [60, 60], maxZoom: 6 });
+    if (fit && bounds.length) map.fitBounds(bounds, { padding: [60, 60], maxZoom: 6 });
+
+    ensureWeather();   // backfill kickoff weather for the plotted matches
   }
 
   // ── team checklist (grouped A–L, filterable) ────────────────────────────────

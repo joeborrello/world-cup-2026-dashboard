@@ -15,8 +15,8 @@ Built with Flask + Jinja2 + vanilla JS (Leaflet for maps), served by gunicorn un
 - **Three maps** (Leaflet + OpenStreetMap):
   - **Daily map** — a day slider (Jun 11 → Jul 19) lighting up that day's venues, with **country-flag pins** and click-through match detail.
   - **Schedule map** — the full fixture list plotted across the 16 host cities.
-  - **Follow-a-team map** — pick one or more teams and trace their journey, with date-gradient pins, **gradient path lines**, and directional arrows.
-- **Match-day weather** — live radar, isobars, and weather advisories for today's games; temperature + precipitation forecasts for upcoming dates; historical conditions for matches already played. F/C toggle, a national temperature heat map, and per-venue humidity/dewpoint.
+  - **Follow-a-team map** — pick one or more teams and trace their journey, with date-gradient pins, **gradient path lines**, directional arrows, and **per-match kickoff weather** (actual conditions for matches played, forecast for those upcoming).
+- **Match-day weather** — live radar, isobars, and weather advisories for today's games; temperature + precipitation forecasts for upcoming dates; historical conditions for matches already played, shown at each match's kickoff hour on **both the daily and follow-a-team maps**. F/C toggle, a national temperature heat map, and per-venue humidity/dewpoint.
 - **Live score ticker** — when a match is in progress, the live score appears site-wide.
 - **Predictions** — an Elo Monte-Carlo engine projects title odds, group-qualification odds, and a *likely* bracket, with an Actual/Projected toggle and a depth selector (R32 → Final).
 - **AI pundit panel** *(experimental, optional)* — a [MiroFish](https://github.com/666ghj/MiroFish)-inspired panel of opinionated Claude personas debates the race, grounded in the model's numbers, with self-tracked cost controls.
@@ -43,7 +43,7 @@ A new, separate map: select one or more teams from a checklist and plot their ma
 Refinements to the follow-a-team view: **path lines that follow the same date gradient**, **directional arrows** along each leg, and **whole-pin coloring** by date (replacing the small dot).
 
 ### Stage 5 — Weather
-Match-day weather on the daily map: **live radar** (RainViewer), **isobars** (OpenWeatherMap pressure tiles), and **weather advisories** across all three host nations (US via NWS, Canada via MSC GeoMet). Keyless **Open-Meteo** supplies temperature and precipitation **forecasts** for future dates and **historical** conditions for matches already played.
+Match-day weather on the daily map: **live radar** (RainViewer), **isobars** (OpenWeatherMap pressure tiles), and **weather advisories** across all three host nations (US via NWS, Canada via MSC GeoMet). Keyless **Open-Meteo** supplies temperature and precipitation **forecasts** for future dates and **historical** conditions for matches already played. The same kickoff-hour weather (shared `WCWx` formatter, `/api/weather?nums=`) is surfaced on the **follow-a-team map**, so each match on a team's run shows its actual or forecast conditions.
 
 ### Stage 6 — Temperature controls
 A **°F / °C toggle**, a **nationwide temperature heat map** overlay, a **numeric range legend** on the color bar, and per-venue **humidity + dewpoint**. (Includes a fix for West-Coast late kickoffs that fall into the next UTC day.)

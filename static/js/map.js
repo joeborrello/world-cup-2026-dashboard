@@ -27,34 +27,10 @@
   }
   function clearMarkers() { markers.forEach(m => map.removeLayer(m)); markers = []; }
 
-  // ── temperature unit (device preference, persisted) ─────────────────────────
-  let unit = localStorage.getItem('wcUnit') === 'C' ? 'C' : 'F';
-  function cvt(f) { return unit === 'C' ? (f - 32) * 5 / 9 : f; }
-  function tShort(f) { return f == null ? '' : Math.round(cvt(f)) + '°'; }
-  function tFull(f) { return f == null ? '' : Math.round(cvt(f)) + '°' + unit; }
-
-  // ── weather formatting ──────────────────────────────────────────────────────
-  const KIND_LABEL = { forecast: 'Forecast', current: 'Today', historical: 'Actual' };
-
-  function wxChip(w) {
-    if (!w || w.available === false) return '';
-    const p = w.precip_prob != null ? ` ${w.precip_prob}%` : '';
-    return `<span class="wx">${w.emoji || ''}${tShort(w.temp_f)}${p}</span>`;
-  }
-  function wxLine(w) {
-    if (!w) return '';
-    if (w.available === false)
-      return `<div class="ml-wx wx-na">⏳ Forecast not yet available (more than 16 days out)</div>`;
-    const parts = [];
-    if (w.temp_f != null) parts.push(tFull(w.temp_f));
-    if (w.humidity != null) parts.push(`${w.humidity}% humidity`);
-    if (w.dewpoint_f != null) parts.push(`${tShort(w.dewpoint_f)} dew pt`);
-    if (w.precip_prob != null) parts.push(`${w.precip_prob}% precip`);
-    else if (w.precip_in) parts.push(`${w.precip_in}″ rain`);
-    if (w.wind_mph != null) parts.push(`${Math.round(w.wind_mph)} mph wind`);
-    return `<div class="ml-wx">${w.emoji || ''} <b>${w.desc || ''}</b> · ${parts.join(' · ')} ` +
-      `<span class="wx-kind">${KIND_LABEL[w.kind] || ''}</span></div>`;
-  }
+  // ── temperature unit + weather formatting ───────────────────────────────────
+  // Both live in the shared WCWx module so the daily and follow-a-team maps render
+  // identical chips/lines and share one persisted °F/°C preference.
+  const wxChip = WCWx.chip, wxLine = WCWx.line;
 
   // ── pins ────────────────────────────────────────────────────────────────────
   function pinFlag(code, name) {
@@ -152,9 +128,9 @@
   function renderTempLegend() {
     const cap = document.getElementById('tempCap');
     const ticks = document.getElementById('tempTicks');
-    if (cap) cap.textContent = `Air temp (°${unit})`;
+    if (cap) cap.textContent = `Air temp (°${WCWx.unit})`;
     if (ticks) ticks.innerHTML = TEMP_ANCHORS_C.map((c, i) => {
-      const val = unit === 'C' ? c : Math.round(c * 9 / 5 + 32);
+      const val = WCWx.unit === 'C' ? c : Math.round(c * 9 / 5 + 32);
       return `<span>${val}°${i === TEMP_ANCHORS_C.length - 1 ? '+' : ''}</span>`;
     }).join('');
   }
@@ -170,12 +146,11 @@
   // ── unit toggle ─────────────────────────────────────────────────────────────
   const unitToggle = document.getElementById('unitToggle');
   unitToggle.querySelectorAll('button').forEach(b => {
-    b.classList.toggle('active', b.dataset.unit === unit);
+    b.classList.toggle('active', b.dataset.unit === WCWx.unit);
     b.addEventListener('click', () => {
-      if (b.dataset.unit === unit) return;
-      unit = b.dataset.unit;
-      localStorage.setItem('wcUnit', unit);
-      unitToggle.querySelectorAll('button').forEach(x => x.classList.toggle('active', x.dataset.unit === unit));
+      if (b.dataset.unit === WCWx.unit) return;
+      WCWx.setUnit(b.dataset.unit);
+      unitToggle.querySelectorAll('button').forEach(x => x.classList.toggle('active', x.dataset.unit === WCWx.unit));
       renderTempLegend();   // keep the heat-map scale in the chosen unit
       draw(false);          // re-render temps in place, keep current view
     });
