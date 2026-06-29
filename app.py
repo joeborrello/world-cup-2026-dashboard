@@ -7,6 +7,7 @@ seed_data.py and refreshed by update_results.py.
 """
 
 import json
+import os
 import re
 import time
 from datetime import date, datetime, timedelta
@@ -54,6 +55,25 @@ with app.app_context():
     _c = db.connect()
     db.init_schema(_c)
     _c.close()
+
+
+# Cache-bust every static asset by its file mtime, so a deploy that ships a new
+# bracket.js/style.css can never be masked by a browser still running the old
+# cached copy. (The interactive-bracket fix only "doesn't take" for a user whose
+# browser kept serving the previous script — append ?v=<mtime> and that's
+# impossible.) Applies to every url_for('static', ...) call, templates untouched.
+@app.url_defaults
+def _static_cache_bust(endpoint, values):
+    if endpoint != 'static' or 'v' in values:
+        return
+    filename = values.get('filename')
+    if not filename:
+        return
+    try:
+        mtime = os.stat(os.path.join(app.static_folder, filename)).st_mtime
+    except OSError:
+        return
+    values['v'] = int(mtime)
 
 
 # ── data helpers ───────────────────────────────────────────────────────────

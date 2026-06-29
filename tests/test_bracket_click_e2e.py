@@ -32,6 +32,12 @@ import app as flask_app  # noqa: E402
 
 @pytest.fixture(scope="module")
 def live_server():
+    # The app mounts under a /worldcup SCRIPT_NAME for production (so url_for emits
+    # /worldcup/static/...). A bare werkzeug server has no nginx stripping that
+    # prefix, so those asset URLs would 404 and bracket.js would never load —
+    # making every interaction test vacuously "fail". Neutralise the subpath here
+    # so the page serves its JS/CSS from the root the test server actually answers.
+    flask_app.app.wsgi_app.script_name = ""
     srv = make_server("127.0.0.1", 0, flask_app.app)
     port = srv.server_port
     t = threading.Thread(target=srv.serve_forever, daemon=True)
@@ -96,6 +102,47 @@ def test_pick_feedback_is_visible_on_screen(live_server, browser):
                && r.left >= 0 && r.right <= innerWidth && e.textContent.trim().length > 0;
     }""")
     assert visible, "the pick confirmation toast must be visible within the window"
+    page.close()
+
+
+def test_every_match_box_lets_either_team_be_picked(live_server, browser):
+    """JOE-11 revision, in a real browser: the reviewer reported that R32 matches
+    couldn't be picked at all and "not all of the other matches allow either team
+    to be selected." Walk EVERY steerable box and click EACH of its two sides,
+    asserting the click locks that exact team. A single failing box (an R32 one,
+    say) fails the test — the comprehensive guard the earlier single-box test
+    lacked."""
+    page = browser.new_page(viewport={"width": 1400, "height": 900})
+    errors = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    _enter_projected(page, live_server)
+
+    report = page.evaluate("""async () => {
+      const boxes = [...document.querySelectorAll('.bmatch.has-pred')];
+      const failures = [];
+      let checked = 0;
+      for (const bx of boxes) {
+        const sides = [...bx.querySelectorAll('.bm-side.predicted[data-team]')];
+        if (sides.length < 2) { failures.push(bx.id + ':<2 pickable sides'); continue; }
+        for (const s of sides) {
+          const team = s.dataset.team;
+          s.click();
+          await new Promise(r => setTimeout(r, 200));
+          if (!s.classList.contains('locked'))
+            failures.push(bx.id + ':' + team + ' did not lock');
+          s.click();                         // undo so picks don't pile up
+          await new Promise(r => setTimeout(r, 200));
+          checked++;
+        }
+      }
+      return { boxes: boxes.length, checked, failures };
+    }""")
+    assert report["boxes"] >= 30, \
+        f"expected the full knockout bracket to be steerable, got {report['boxes']} boxes"
+    assert not report["failures"], \
+        f"every box/side must be pickable; failures: {report['failures']}"
+    assert report["checked"] == report["boxes"] * 2, "each box should expose two pickable sides"
+    assert not errors, f"no JS errors expected, got: {errors}"
     page.close()
 
 
