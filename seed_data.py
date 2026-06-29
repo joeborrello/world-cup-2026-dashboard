@@ -23,10 +23,10 @@ def seed(prefer_remote=True):
     conn.execute("DELETE FROM venues")
     for ground, v in VENUES.items():
         conn.execute(
-            """INSERT INTO venues (ground, stadium, city, country, lat, lng, tz)
-               VALUES (?,?,?,?,?,?,?)""",
+            """INSERT INTO venues (ground, stadium, city, country, lat, lng, tz, roof)
+               VALUES (?,?,?,?,?,?,?,?)""",
             (ground, v["stadium"], v["city"], v["country"],
-             v["lat"], v["lng"], v["tz"]),
+             v["lat"], v["lng"], v["tz"], v["roof"]),
         )
 
     # matches

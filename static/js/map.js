@@ -32,6 +32,24 @@
   // identical chips/lines and share one persisted °F/°C preference.
   const wxChip = WCWx.chip, wxLine = WCWx.line;
 
+  // ── open-vs-covered stadium note ─────────────────────────────────────────────
+  // Each venue carries a `roof` type (open | retractable | fixed). Open-air pitches
+  // are exposed to the weather; a retractable or fixed roof can cover the field, so
+  // both read as "covered" with the kind of roof spelled out.
+  const ROOF_NOTE = {
+    open: { label: 'Open-air', icon: '⛅', cls: 'roof-open',
+      title: 'Open-air stadium — the pitch is exposed to the weather' },
+    retractable: { label: 'Retractable roof', icon: '🏟️', cls: 'roof-covered',
+      title: 'Covered stadium — a retractable roof can close the pitch off from the weather' },
+    fixed: { label: 'Covered (fixed roof)', icon: '🏟️', cls: 'roof-covered',
+      title: 'Covered stadium — a fixed roof always shelters the pitch from the weather' },
+  };
+  function roofNote(roof) {
+    const r = ROOF_NOTE[roof];
+    if (!r) return '';
+    return `<span class="roof ${r.cls}" title="${r.title}">${r.icon} ${r.label}</span>`;
+  }
+
   // ── pins ────────────────────────────────────────────────────────────────────
   function pinFlag(code, name) {
     if (!code) return '<span class="fp-tbd">?</span>';
@@ -50,7 +68,8 @@
   }
   function popupHtml(matches, wx) {
     const v = matches[0];
-    let html = `<strong>${v.stadium}</strong><br><span class="pop-city">${v.city}, ${v.country}</span><hr>`;
+    let html = `<strong>${v.stadium}</strong><br><span class="pop-city">${v.city}, ${v.country}</span>` +
+      `<div class="pop-roof">${roofNote(v.roof)}</div><hr>`;
     matches.forEach(m => {
       const sc = m.status === 'finished' ? ` <b>${m.score1}–${m.score2}</b>` : '';
       const tag = m.group ? `Grp ${m.group}` : m.round;
@@ -111,7 +130,7 @@
         `<span class="ml-time">${WCTime.time(m.utc_datetime)} ${WCTime.tz}</span></div>` +
         `<div class="ml-teams">${wcFlag(m.team1_code, m.team1)}${m.team1} <em>v</em> ` +
         `${wcFlag(m.team2_code, m.team2)}${m.team2} ${sc}</div>` +
-        `<div class="ml-venue">📍 ${m.stadium}, ${m.city}</div>` + wxLine(wx[m.num]);
+        `<div class="ml-venue">📍 ${m.stadium}, ${m.city} ${roofNote(m.roof)}</div>` + wxLine(wx[m.num]);
       li.addEventListener('click', () => {
         const mk = markers.find(x => {
           const ll = x.getLatLng();

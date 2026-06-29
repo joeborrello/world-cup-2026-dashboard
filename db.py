@@ -12,7 +12,8 @@ CREATE TABLE IF NOT EXISTS venues (
     country  TEXT,
     lat      REAL,
     lng      REAL,
-    tz       TEXT
+    tz       TEXT,
+    roof     TEXT                 -- 'open' | 'retractable' | 'fixed' (open vs covered)
 );
 
 CREATE TABLE IF NOT EXISTS teams (
@@ -75,4 +76,24 @@ def connect():
 
 def init_schema(conn):
     conn.executescript(SCHEMA)
+    _migrate_venue_roof(conn)
     conn.commit()
+
+
+def _migrate_venue_roof(conn):
+    """Add + backfill venues.roof on an already-seeded DB.
+
+    CREATE TABLE IF NOT EXISTS never alters an existing table, so a production DB
+    seeded before the open-vs-covered note shipped has no ``roof`` column. This
+    runs on startup (db.init_schema) and, when the column is missing, adds it and
+    backfills the static roof type from the venue table — no full reseed needed.
+    Idempotent: a no-op once the column exists.
+    """
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(venues)")]
+    if "roof" in cols:
+        return
+    conn.execute("ALTER TABLE venues ADD COLUMN roof TEXT")
+    from venues import VENUES
+    for ground, v in VENUES.items():
+        conn.execute("UPDATE venues SET roof=? WHERE ground=?",
+                     (v.get("roof"), ground))

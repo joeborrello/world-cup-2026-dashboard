@@ -208,6 +208,16 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
 .pop-match { margin: .2rem 0; font-size: .85rem; }
 .pop-tag { font-weight: 700; color: var(--green); }
 
+/* ── open-vs-covered stadium note ──── */
+.pop-roof { margin-top: .25rem; }
+.roof { display: inline-block; font-size: .7rem; font-weight: 700; line-height: 1;
+  padding: 2px 6px; border-radius: 999px; white-space: nowrap; vertical-align: middle; }
+.roof-open { color: #1f6f4a; background: rgba(35, 180, 120, .16);
+  border: 1px solid rgba(35, 180, 120, .45); }
+.roof-covered { color: #6a4bb0; background: rgba(126, 92, 214, .16);
+  border: 1px solid rgba(126, 92, 214, .45); }
+.ml-venue .roof { margin-left: .25rem; }
+
 /* ── daily-map flag pins (who's playing, at a glance) ──── */
 .fp-wrap { background: none; border: none; }
 .fp-pin { position: relative; display: flex; flex-direction: column; gap: 3px;
