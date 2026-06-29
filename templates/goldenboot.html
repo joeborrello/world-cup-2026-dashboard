@@ -5,9 +5,9 @@
 <section class="hero">
   <h1>Golden Boot race</h1>
   <p class="subtle">Who's in contention to finish as the tournament's top scorer — with a
-    projection of the goals each contender is on course to add. Penalties count; own goals
-    don't. Projected totals carry each player's scoring rate over the matches their team is
-    still expected to play, from the
+    projected <em>range</em> of the goals each contender is on course to add. Penalties count;
+    own goals don't. Projected ranges carry each player's scoring rate over the matches their
+    team is still expected to play, from the
     <a href="{{ url_for('predictions_page') }}">Monte-Carlo model</a>.</p>
 </section>
 
@@ -42,8 +42,8 @@
         <th class="team">Team</th>
         <th class="num" title="Goals so far (penalties counted)">Goals</th>
         <th class="num pen" title="Of which from the penalty spot">Pens</th>
-        <th class="num proj" title="Projected additional goals over the team's expected remaining matches">Proj +</th>
-        <th class="num projtot" title="Projected final tally (goals now + projected additional)">Proj total</th>
+        <th class="num proj" title="Likely range of additional goals over the team's expected remaining matches (80% interval — you can't score a fraction of a goal)">Proj +</th>
+        <th class="num projtot" title="Likely final-tally range (goals now + projected additional)">Proj total</th>
       </tr>
     </thead>
     <tbody>
@@ -56,8 +56,13 @@
         <td class="team">{{ p.team }}</td>
         <td class="num goals">{{ p.goals }}</td>
         <td class="num pen">{{ p.penalties or '–' }}</td>
-        <td class="num proj">{% if p.proj_additional %}+{{ p.proj_additional }}{% else %}–{% endif %}</td>
-        <td class="num projtot">{{ p.proj_total }}</td>
+        <td class="num proj">
+          {%- if p.proj_add_high == 0 %}–
+          {%- elif p.proj_add_low == p.proj_add_high %}+{{ p.proj_add_high }}
+          {%- else %}+{{ p.proj_add_low }}–{{ p.proj_add_high }}{% endif %}</td>
+        <td class="num projtot">
+          {%- if p.proj_total_low == p.proj_total_high %}{{ p.proj_total_high }}
+          {%- else %}{{ p.proj_total_low }}–{{ p.proj_total_high }}{% endif %}</td>
       </tr>
       {% endfor %}
     </tbody>
@@ -66,7 +71,9 @@
 
 <p class="subtle gb-note">Projection = a goals-per-match rate × the team's expected remaining matches.
   The rate is regressed toward a modest prior early on (so a hot opening game doesn't project a
-  record-shattering tally) and sharpens as more matches are played. It's a transparent estimate, not a
+  record-shattering tally) and sharpens as more matches are played. Because goals come in whole numbers,
+  the projection is shown as a <strong>range</strong> — the 80% most-likely band of additional goals
+  (a Poisson interval about that rate), not a fractional figure. It's a transparent estimate, not a
   per-player model — a striker on a team projected deep into the knockouts is credited more upside than
   one likely to bow out early.</p>
 {% else %}

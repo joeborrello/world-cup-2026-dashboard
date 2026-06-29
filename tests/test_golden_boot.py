@@ -178,6 +178,22 @@ def test_projection_arithmetic_with_shrinkage():
     assert p["proj_total"] >= p["goals"]
 
 
+def test_projection_exposes_whole_goal_range():
+    """The projection must be surfaced as an integer range, not a fractional tally."""
+    board = [{"player": "X", "team": "T", "goals": 2,
+              "penalties": 0, "matches_scored": 1}]
+    goldenboot.project(board, teams_odds={}, played={"T": 1}, remaining={"T": 4.0})
+    p = board[0]
+    for key in ("proj_add_low", "proj_add_high", "proj_total_low", "proj_total_high"):
+        assert isinstance(p[key], int), f"{key} must be a whole goal count"
+    # a non-trivial mean (4.0) yields a genuine spread bracketing the expectation
+    assert p["proj_add_low"] < p["proj_add_high"]
+    assert p["proj_add_low"] <= p["proj_additional"] <= p["proj_add_high"]
+    # the total range is just the present tally shifted up by the additional range
+    assert p["proj_total_low"] == p["goals"] + p["proj_add_low"]
+    assert p["proj_total_high"] == p["goals"] + p["proj_add_high"]
+
+
 def test_projection_never_below_current_tally():
     board = [{"player": "Y", "team": "T", "goals": 5,
               "penalties": 0, "matches_scored": 3}]
@@ -185,6 +201,21 @@ def test_projection_never_below_current_tally():
     # an eliminated team has no remaining matches -> no upside, but never negative
     assert board[0]["proj_additional"] == 0.0
     assert board[0]["proj_total"] == 5.0
+    # the range collapses onto the present tally — nothing more to score
+    assert board[0]["proj_add_low"] == 0 and board[0]["proj_add_high"] == 0
+    assert board[0]["proj_total_low"] == 5 and board[0]["proj_total_high"] == 5
+
+
+def test_poisson_interval_is_central_and_integer():
+    # zero mean -> a point at 0 (no remaining matches, no goals to add)
+    assert goldenboot._poisson_interval(0.0) == (0, 0)
+    lo, hi = goldenboot._poisson_interval(4.0)
+    assert isinstance(lo, int) and isinstance(hi, int)
+    assert 0 <= lo < hi
+    assert lo <= 4 <= hi                    # the interval brackets the mean
+    # wider mean -> wider (or equal) band, and the band never inverts
+    lo2, hi2 = goldenboot._poisson_interval(8.0)
+    assert hi2 - lo2 >= hi - lo
 
 
 def test_expected_remaining_matches_uses_odds_and_subtracts_played():
@@ -222,10 +253,15 @@ def test_tracker_payload_shape_and_contention(conn):
     assert [p["goals"] for p in board] == sorted((p["goals"] for p in board), reverse=True)
     assert board[0]["rank"] == 1
     assert board[0]["in_contention"] is True
-    # everyone carries the projection fields
+    # everyone carries the projection fields, including the whole-goal range
     for p in board:
         assert "proj_total" in p and "proj_additional" in p
         assert p["proj_total"] >= p["goals"]
+        assert {"proj_add_low", "proj_add_high",
+                "proj_total_low", "proj_total_high"} <= set(p)
+        assert p["proj_add_low"] <= p["proj_add_high"]
+        assert p["proj_total_low"] == p["goals"] + p["proj_add_low"]
+        assert p["proj_total_high"] >= p["goals"]
     # contention flag matches the documented gap
     leader = data["leader_goals"]
     for p in board:
@@ -259,6 +295,21 @@ def test_page_renders_table_and_controls(client):
     assert 'id="gbSortNow"' in html
     assert 'id="gbSortProj"' in html
     assert 'Proj total' in html
+
+
+def test_page_shows_whole_goal_ranges_not_decimals(client):
+    """Revision JOE-13: projected goals must read as a whole-number range,
+    never a fractional tally like ``4.4``."""
+    import re
+    html = client.get('/golden-boot').get_data(as_text=True)
+    proj = re.findall(r'<td class="num proj">\s*(.*?)</td>', html, re.S)
+    projtot = re.findall(r'<td class="num projtot">\s*(.*?)</td>', html, re.S)
+    assert proj and projtot, "the seeded feed has contenders with projections"
+    for cell in proj + projtot:
+        # no decimals anywhere in the projection columns
+        assert '.' not in cell, f"projection cell still fractional: {cell!r}"
+    # at least one genuine range is rendered (en-dash separating low/high)
+    assert any('–' in cell for cell in projtot)
 
 
 def test_nav_links_to_golden_boot(client):
