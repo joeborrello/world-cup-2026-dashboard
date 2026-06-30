@@ -12,15 +12,18 @@
     <span class="time" data-utc="{{ m.utc_datetime }}" data-tz>{{ m.local_time or 'TBD' }}</span>
   </div>
   <div class="match-teams">
-    <div class="row">
+    <div class="row{{ ' win' if m.status == 'finished' and m.winner_side == 1 }}">
       {{ side(m.team1, m.team1_resolved) }}
-      <span class="score" data-score="1">{% if m.status == 'finished' %}{{ m.score1 }}{% endif %}</span>
+      <span class="score" data-score="1">{% if m.status == 'finished' %}{{ m.score1 }}{% if m.pen1 is not none %} <span class="pens">({{ m.pen1 }})</span>{% endif %}{% endif %}</span>
     </div>
-    <div class="row">
+    <div class="row{{ ' win' if m.status == 'finished' and m.winner_side == 2 }}">
       {{ side(m.team2, m.team2_resolved) }}
-      <span class="score" data-score="2">{% if m.status == 'finished' %}{{ m.score2 }}{% endif %}</span>
+      <span class="score" data-score="2">{% if m.status == 'finished' %}{{ m.score2 }}{% if m.pen2 is not none %} <span class="pens">({{ m.pen2 }})</span>{% endif %}{% endif %}</span>
     </div>
   </div>
+  {% if m.status == 'finished' and m.winner_side and m.pen1 is not none and m.pen2 is not none %}
+  <div class="match-pens">🥅 {{ m.team1 if m.winner_side == 1 else m.team2 }} won {{ [m.pen1, m.pen2] | max }}–{{ [m.pen1, m.pen2] | min }} on penalties</div>
+  {% endif %}
   <div class="match-venue">📍 {{ m.stadium }}, {{ m.city }}</div>
 </div>
 {%- endmacro %}

@@ -94,6 +94,8 @@
     border-radius:7px;padding:3px 9px;background:var(--card)}
   .ls-box.on{border-color:var(--red);background:#fff6f5}
   .ls-sc{font-weight:700}
+  .ls-pk{font-weight:600;font-size:11px;color:var(--muted)}
+  .ls-win{font-weight:700}
   .ls-vs{color:var(--muted)}
   /* LIVE / HT indicator, now to the left of the matchup */
   .ls-badge{color:var(--red);font-weight:700;font-size:10.5px;border:1px solid var(--red);
@@ -277,20 +279,28 @@
     } else {
       todayEl.innerHTML = today.map(function (m) {
         var live = !!m.state, done = m.status === 'finished';
+        // a knockout settled on penalties: name the shootout winner instead of
+        // leaving the matchup as a bare level scoreline (e.g. Germany 1–1 Paraguay).
+        var pk = done && m.pen1 != null && m.pen2 != null && m.winner_side;
         var mid;
         if (live || done) {
           mid = '<span class="ls-sc">' + (m.score1 == null ? 0 : m.score1) + '–' +
-            (m.score2 == null ? 0 : m.score2) + '</span>';
+            (m.score2 == null ? 0 : m.score2) +
+            (pk ? ' <span class="ls-pk">(' + Math.max(m.pen1, m.pen2) + '–' +
+              Math.min(m.pen1, m.pen2) + ' pens)</span>' : '') + '</span>';
         } else {
           mid = '<span class="ls-vs">' + fmtTime(m.utc_datetime) + '</span>';
         }
+        // the shootout winner's name is bolded so the result reads at a glance
+        var n1 = pk && m.winner_side === 1 ? '<b class="ls-win">' + m.team1 + '</b>' : m.team1;
+        var n2 = pk && m.winner_side === 2 ? '<b class="ls-win">' + m.team2 + '</b>' : m.team2;
         // LIVE / HT indicator sits to the LEFT of the matchup, not between the teams.
         var badge = m.state === 'paused' ? '<span class="ls-badge">HT</span>'
           : m.state ? '<span class="ls-badge">LIVE</span>' : '';
         // The two teams playing and the current score are wrapped in a thin box.
         var box = '<span class="ls-box' + (live ? ' on' : '') + '">' +
-          flag(m.code1, m.team1) + m.team1 + ' ' + mid + ' ' +
-          flag(m.code2, m.team2) + m.team2 + '</span>';
+          flag(m.code1, m.team1) + n1 + ' ' + mid + ' ' +
+          flag(m.code2, m.team2) + n2 + '</span>';
         return '<span class="ls-m">' + badge + box + '</span>';
       }).join('');
     }
