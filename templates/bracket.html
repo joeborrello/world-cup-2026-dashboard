@@ -8,15 +8,15 @@
      {% if m.sources %}data-src="{{ m.sources | join(',') }}"{% endif %}
      {% if kind == 'third' %}data-loss="1"{% endif %}>
   <div class="bm-no">#{{ m.num }}</div>
-  <div class="bm-side {{ 'tbd' if not m.team1_resolved }}">
+  <div class="bm-side {{ 'tbd' if not m.team1_resolved }}{{ ' win' if m.winner_side == 1 }}">
     {% if m.team1_resolved %}{{ m.team1 | flag }}{% endif %}
     <span class="name">{{ m.team1 }}</span>
-    <span class="score">{% if m.status == 'finished' %}{{ m.score1 }}{% endif %}</span>
+    <span class="score">{% if m.status == 'finished' %}{{ m.score1 }}{% if m.pen1 is not none %} <span class="pens">({{ m.pen1 }})</span>{% endif %}{% endif %}</span>
   </div>
-  <div class="bm-side {{ 'tbd' if not m.team2_resolved }}">
+  <div class="bm-side {{ 'tbd' if not m.team2_resolved }}{{ ' win' if m.winner_side == 2 }}">
     {% if m.team2_resolved %}{{ m.team2 | flag }}{% endif %}
     <span class="name">{{ m.team2 }}</span>
-    <span class="score">{% if m.status == 'finished' %}{{ m.score2 }}{% endif %}</span>
+    <span class="score">{% if m.status == 'finished' %}{{ m.score2 }}{% if m.pen2 is not none %} <span class="pens">({{ m.pen2 }})</span>{% endif %}{% endif %}</span>
   </div>
   <div class="bm-foot">
     <span data-utc="{{ m.utc_datetime }}" data-fmt="datetime">{{ m.date }}</span>

@@ -163,6 +163,9 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
 .bm-side .name { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bm-side .score { font-weight: 800; font-variant-numeric: tabular-nums; }
 .bm-side.tbd { color: var(--muted); font-style: italic; font-weight: 500; font-size: .8rem; }
+.bm-side.win .name { color: var(--accent, #0a7d2c); }
+.bm-side.win .score { color: var(--accent, #0a7d2c); }
+.bm-side .score .pens { font-weight: 700; font-size: .72rem; color: var(--muted); }
 .bm-foot { font-size: .68rem; color: var(--muted); padding: .28rem .5rem; background: #fafbfa; border-top: 1px dashed var(--line); }
 
 /* group rail tables */

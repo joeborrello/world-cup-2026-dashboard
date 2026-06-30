@@ -15,6 +15,25 @@ WINNER_RE = re.compile(r"^W(\d+)$")
 LOSER_RE = re.compile(r"^L(\d+)$")
 
 
+def winner_side(score1, score2, pen1=None, pen2=None):
+    """Return 1 if team1 won, 2 if team2 won, None if undecided.
+
+    A knockout that is level after regulation/extra time is decided by the
+    penalty shootout, so an equal (score1, score2) is NOT a winner unless a
+    shootout breaks it. Group matches simply pass pen1/pen2 as None and a draw
+    correctly returns None. This is the single source of truth for "who advanced"
+    so compute, predict and the API never disagree (JOE-16)."""
+    if score1 is None or score2 is None:
+        return None
+    if score1 > score2:
+        return 1
+    if score2 > score1:
+        return 2
+    if pen1 is not None and pen2 is not None and pen1 != pen2:
+        return 1 if pen1 > pen2 else 2
+    return None
+
+
 def _blank(team, group_letter):
     return {
         "group_letter": group_letter, "team": team, "played": 0,
@@ -229,6 +248,7 @@ def resolve_bracket(conn, standings, thirds=None):
     state = {m["num"]: {
         "team1": m["team1"], "team2": m["team2"],
         "score1": m["score1"], "score2": m["score2"],
+        "pen1": m["pen1"], "pen2": m["pen2"],
         "status": m["status"],
     } for m in ko}
     slots = {m["num"]: (m["team1_slot"], m["team2_slot"]) for m in ko}
@@ -245,48 +265,53 @@ def resolve_bracket(conn, standings, thirds=None):
         s = state.get(n)
         if not s or s["status"] != "finished":
             return None
-        if s["score1"] is None or s["score2"] is None:
+        side = winner_side(s["score1"], s["score2"], s["pen1"], s["pen2"])
+        if side is None:
             return None
-        return s["team1"] if s["score1"] >= s["score2"] else s["team2"]
+        return s["team1"] if side == 1 else s["team2"]
 
     def loser(n):
         s = state.get(n)
         if not s or s["status"] != "finished":
             return None
-        if s["score1"] is None or s["score2"] is None:
+        side = winner_side(s["score1"], s["score2"], s["pen1"], s["pen2"])
+        if side is None:
             return None
-        return s["team2"] if s["score1"] >= s["score2"] else s["team1"]
+        return s["team2"] if side == 1 else s["team1"]
 
-    def resolve(slot):
+    def resolve(slot, current):
         gm = GROUP_SLOT_RE.match(slot)
         if gm:
             pos, letter = int(gm.group(1)), gm.group(2)
             if _group_complete(standings, letter):
                 return standings[letter][pos - 1]["team"]
-            return None
+            return None  # group not settled yet -> slot is unknown
         wm = WINNER_RE.match(slot)
         if wm:
-            return winner(int(wm.group(1)))
+            return winner(int(wm.group(1)))   # None until match n is finished
         lm = LOSER_RE.match(slot)
         if lm:
-            return loser(int(lm.group(1)))
+            return loser(int(lm.group(1)))    # None until match n is finished
         if THIRD_SLOT_RE.match(slot):
-            return None  # "3A/B/C/D/F" — filled by the pre-seed third_assign above
-        return slot      # a literal team name (an openfootball-decided knockout team)
+            return current  # "3A/B/C/D/F" — owned by the pre-seeded third_assign
+        return slot         # a literal team name (an openfootball-decided knockout team)
 
-    # iterate to a fixed point (later rounds depend on earlier ones). Re-resolve
-    # every slot each pass and OVERWRITE when the derived team changes — a score
-    # correction upstream (e.g. a fixed group result) must re-seed the bracket,
-    # not be ignored because the slot was already filled with a now-stale team.
-    # `resolve` only returns a team once its feeder is settled, so we never erase
-    # a known team back to None.
+    # iterate to a fixed point (later rounds depend on earlier ones). Re-derive
+    # every slot each pass and assign the result UNCONDITIONALLY — including back
+    # to None when a feeder is no longer settled. A premature or wrong upstream
+    # result that already leaked a team into a later round (e.g. South Africa
+    # shown beating Canada, or Paraguay advancing past an unfinished
+    # Germany-Paraguay) must be CLEARED, not left stale, the moment the feeder
+    # stops pointing at a decided winner (JOE-16). Literal team names resolve to
+    # themselves and third-place slots resolve to their pre-seeded value, so only
+    # genuinely derivable slots (group / W{n} / L{n}) ever get cleared.
     for _ in range(len(ko) + 1):
         changed = False
         for n in sorted(state):
             s1, s2 = slots[n]
             for key, slot in (("team1", s1), ("team2", s2)):
-                r = resolve(slot)
-                if r is not None and state[n][key] != r:
+                r = resolve(slot, state[n][key])
+                if state[n][key] != r:
                     state[n][key] = r
                     changed = True
         if not changed:

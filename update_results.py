@@ -34,16 +34,20 @@ def _update_from_openfootball(conn, prefer_remote=True):
     changed = 0
     for m in matches:
         cur = conn.execute(
-            "SELECT score1, score2, status, team1_slot, team2_slot FROM matches WHERE num=?",
+            "SELECT score1, score2, pen1, pen2, status, team1_slot, team2_slot "
+            "FROM matches WHERE num=?",
             (m["num"],),
         ).fetchone()
         if cur is None:
             continue
         sets, params = [], []
-        if (cur["score1"], cur["score2"], cur["status"]) != (
-                m["score1"], m["score2"], m["status"]):
-            sets += ["score1=?", "score2=?", "status=?"]
-            params += [m["score1"], m["score2"], m["status"]]
+        # pen1/pen2 are part of the result: a knockout that goes to a shootout has
+        # a level score and is settled only by the penalties, so they must sync
+        # too or the bracket can't tell who advanced (JOE-16).
+        if (cur["score1"], cur["score2"], cur["pen1"], cur["pen2"], cur["status"]) != (
+                m["score1"], m["score2"], m["pen1"], m["pen2"], m["status"]):
+            sets += ["score1=?", "score2=?", "pen1=?", "pen2=?", "status=?"]
+            params += [m["score1"], m["score2"], m["pen1"], m["pen2"], m["status"]]
         # Adopt openfootball's authoritative 3rd-place R32 assignment: once a
         # matchup is decided, the feed replaces the "3A/B/.." placeholder with the
         # real team. Our own matcher only finds *a* valid allocation (not FIFA's
@@ -82,20 +86,95 @@ def _norm_team(name):
     return _NAME_ALIASES.get(n, n)
 
 
-def _aligned_scores(home_name, away_name, home_score, away_score, team1, team2):
-    """Map football-data (home/away) onto our (team1/team2) by NAME, not position.
+def _side_of_home(home_name, away_name, team1, team2):
+    """Which of our sides (1/2) is football-data's home team, or None if unsure.
 
-    Returns (score1, score2) aligned to team1/team2, or None when the teams can't
-    be matched confidently. Position-based mapping was the bug that wrote scores
-    to the wrong side and flipped a group's 2nd place.
+    The single place that maps football-data's home/away onto our team1/team2 by
+    NAME (not feed position, which was the bug that wrote scores to the wrong side
+    and flipped a group's 2nd place).
     """
     h, a = _norm_team(home_name), _norm_team(away_name)
     t1, t2 = _norm_team(team1), _norm_team(team2)
     if h == t1 and a == t2:
-        return home_score, away_score
+        return 1
     if h == t2 and a == t1:
+        return 2
+    return None
+
+
+def _aligned_scores(home_name, away_name, home_score, away_score, team1, team2):
+    """Map football-data (home/away) scores onto our (team1/team2), or None."""
+    side = _side_of_home(home_name, away_name, team1, team2)
+    if side == 1:
+        return home_score, away_score
+    if side == 2:
         return away_score, home_score
     return None
+
+
+# football-data's score.winner, expressed relative to home/away.
+_FD_WINNER = {"HOME_TEAM": "home", "AWAY_TEAM": "away"}
+
+
+def _decide_football_data(sc, home, away, team1, team2, is_knockout):
+    """Read a finished football-data result into (score1, score2, pen1, pen2).
+
+    Queries every part of the score the feed actually carries — not just
+    ``fullTime``. In football-data's v4 match list the ``score`` object is
+    ``{winner, duration, fullTime, halfTime}``: there is NO penalties breakdown,
+    so a knockout settled on penalties arrives as a *level* ``fullTime`` with the
+    shootout winner named only in ``score.winner``. Reading ``fullTime`` alone
+    (or looking for a non-existent ``score.penalties``) therefore stored
+    Germany-Paraguay as a 1-1 draw with no winner and the bracket couldn't
+    advance the right side (JOE-16).
+
+    Returns None — skip, don't corrupt — when teams can't be aligned, the result
+    isn't a real result yet, or the feed's own ``winner`` contradicts the aligned
+    score (a sign our name match is wrong).
+    """
+    ft = sc.get("fullTime") or {}
+    if ft.get("home") is None or ft.get("away") is None:
+        return None
+    scores = _aligned_scores(home, away, ft["home"], ft["away"], team1, team2)
+    if scores is None:
+        return None
+    s1, s2 = scores
+
+    # Map football-data's authoritative winner onto our side (1/2), if it names one.
+    home_side = _side_of_home(home, away, team1, team2)
+    win_home = _FD_WINNER.get(sc.get("winner"))           # 'home' | 'away' | None
+    win_side = None
+    if win_home == "home":
+        win_side = home_side
+    elif win_home == "away":
+        win_side = 3 - home_side if home_side else None
+
+    # A penalties breakdown (present on some plans) is preferred when it's there.
+    pen = sc.get("penalties") or {}
+    if pen.get("home") is not None and pen.get("away") is not None:
+        pens = _aligned_scores(home, away, pen["home"], pen["away"], team1, team2)
+        if pens:
+            return s1, s2, pens[0], pens[1]
+
+    if s1 != s2:
+        # Decisive on the pitch. If the feed names a winner, it must agree with
+        # the score — disagreement means our home/away→team1/team2 match is wrong.
+        score_side = 1 if s1 > s2 else 2
+        if win_side is not None and win_side != score_side:
+            return None
+        return s1, s2, None, None
+
+    # Level fullTime. For a knockout that means a shootout: encode the named
+    # winner as a minimal (1-0) penalty result so the bracket advances correctly
+    # even though football-data doesn't expose the actual shootout score. For a
+    # group match a level result is a genuine draw — no winner, no penalties.
+    if not is_knockout:
+        return s1, s2, None, None
+    if win_side == 1:
+        return s1, s2, 1, 0
+    if win_side == 2:
+        return s1, s2, 0, 1
+    return None  # level knockout with no winner named yet -> not actually settled
 
 
 def _update_from_football_data(conn):
@@ -127,9 +206,7 @@ def _update_from_football_data(conn):
         # bracket prematurely (e.g. South Africa shown as beating Canada mid-game).
         if fx.get("status") != "FINISHED":
             continue
-        ft = (fx.get("score") or {}).get("fullTime") or {}
-        if ft.get("home") is None or ft.get("away") is None:
-            continue
+        sc = fx.get("score") or {}
         utc = fx.get("utcDate")  # e.g. 2026-06-11T19:00:00Z
         if not utc:
             continue
@@ -139,22 +216,24 @@ def _update_from_football_data(conn):
         except ValueError:
             continue
         row = conn.execute(
-            "SELECT num, team1, team2, status FROM matches WHERE utc_datetime=?", (key,)
+            "SELECT num, team1, team2, status, stage FROM matches WHERE utc_datetime=?",
+            (key,)
         ).fetchone()
         if row is None:
             continue
         if row["status"] == "finished":
             continue  # openfootball owns finals — don't overwrite a settled result
-        scores = _aligned_scores(
-            (fx.get("homeTeam") or {}).get("name"),
-            (fx.get("awayTeam") or {}).get("name"),
-            ft["home"], ft["away"], row["team1"], row["team2"],
-        )
-        if scores is None:
-            continue  # can't confidently align teams — skip rather than corrupt
+        home, away = (fx.get("homeTeam") or {}).get("name"), (fx.get("awayTeam") or {}).get("name")
+        decided = _decide_football_data(
+            sc, home, away, row["team1"], row["team2"],
+            is_knockout=(row["stage"] == "knockout"))
+        if decided is None:
+            continue  # can't align teams or no settled winner — skip, don't corrupt
+        s1, s2, pen1, pen2 = decided
         conn.execute(
-            "UPDATE matches SET score1=?, score2=?, status='finished' WHERE num=?",
-            (scores[0], scores[1], row["num"]),
+            "UPDATE matches SET score1=?, score2=?, pen1=?, pen2=?, status='finished' "
+            "WHERE num=?",
+            (s1, s2, pen1, pen2, row["num"]),
         )
         changed += 1
     conn.commit()
