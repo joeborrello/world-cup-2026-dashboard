@@ -6,6 +6,24 @@
   <title>{% block title %}World Cup 2026{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+  {# Link-preview cards: when the URL is pasted into Discord, iMessage/SMS, Slack,
+     WhatsApp, Twitter/X, etc., those clients scrape these Open Graph / Twitter
+     tags to render a rich preview (title, blurb, and the branded image).
+     og:image is absolute (_external) because scrapers require a full URL. #}
+  <meta name="description" content="{{ self.og_description() }}">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="World Cup 2026 Dashboard">
+  <meta property="og:title" content="{% block og_title %}World Cup 2026 Dashboard{% endblock %}">
+  <meta property="og:description" content="{% block og_description %}Follow the 2026 FIFA World Cup in one place — a live bracket and group tables, interactive maps, match-day weather, a live score ticker, a Golden Boot tracker, and an Elo prediction engine.{% endblock %}">
+  <meta property="og:url" content="{{ request.url }}">
+  <meta property="og:image" content="{{ url_for('static', filename='og/preview.png', _external=True) }}">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="World Cup 2026 Dashboard">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{{ self.og_title() }}">
+  <meta name="twitter:description" content="{{ self.og_description() }}">
+  <meta name="twitter:image" content="{{ url_for('static', filename='og/preview.png', _external=True) }}">
   {% block head %}{% endblock %}
 </head>
 <body>
