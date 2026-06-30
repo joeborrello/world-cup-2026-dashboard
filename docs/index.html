@@ -284,10 +284,14 @@
         var pk = done && m.pen1 != null && m.pen2 != null && m.winner_side;
         var mid;
         if (live || done) {
+          // the shootout score must follow the same team1–team2 order as the
+          // scoreline and the left-to-right team layout: pen1 is team1's. Printing
+          // max–min instead read as the wrong side winning (Germany 1–1 Paraguay,
+          // pens 3–4, showed "4–3" — as if Germany had won the shootout). JOE-31.
           mid = '<span class="ls-sc">' + (m.score1 == null ? 0 : m.score1) + '–' +
             (m.score2 == null ? 0 : m.score2) +
-            (pk ? ' <span class="ls-pk">(' + Math.max(m.pen1, m.pen2) + '–' +
-              Math.min(m.pen1, m.pen2) + ' pens)</span>' : '') + '</span>';
+            (pk ? ' <span class="ls-pk">(' + m.pen1 + '–' + m.pen2 +
+              ' pens)</span>' : '') + '</span>';
         } else {
           mid = '<span class="ls-vs">' + fmtTime(m.utc_datetime) + '</span>';
         }

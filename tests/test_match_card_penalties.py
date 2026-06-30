@@ -181,11 +181,28 @@ def _render_strip():
 
 def test_landing_strip_shows_penalty_score_and_bolds_winner():
     html = _render_strip()
-    assert "ls-pk" in html                    # the "(4–3 pens)" annotation
-    assert "4–3 pens" in html
+    assert "ls-pk" in html                    # the "(3–4 pens)" annotation
+    # the shootout score follows team1–team2 order to match the scoreline and the
+    # left-to-right layout: Germany (team1) 3, Paraguay (team2) 4 — NOT max–min,
+    # which used to read as Germany winning 4–3 (JOE-31).
+    assert "3–4 pens" in html
+    assert "4–3 pens" not in html
     # Paraguay is bolded as the shootout winner; Germany is not
     assert '<b class="ls-win">Paraguay</b>' in html
     assert '<b class="ls-win">Germany</b>' not in html
+
+
+def test_landing_strip_penalty_order_matches_team_layout():
+    """The shootout digits line up with the teams left→right: the loser's count is
+    never printed before the winner's just because it's the smaller number. With
+    Germany (team1) on the left, the pens read `3–4` and the score row reads
+    Germany … 3–4 pens … Paraguay (so Paraguay's 4 sits on Paraguay's side)."""
+    html = _render_strip()
+    pk_idx = html.index("3–4 pens")
+    g_idx = html.index("Germany")
+    p_idx = html.index("Paraguay")
+    # Germany appears before the pens annotation, Paraguay after it
+    assert g_idx < pk_idx < p_idx, html
 
 
 def test_landing_strip_css_defines_penalty_styles():
