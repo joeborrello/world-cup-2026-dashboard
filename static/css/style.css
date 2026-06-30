@@ -74,6 +74,11 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
   box-shadow: 0 0 0 1px rgba(0,0,0,.12); vertical-align: middle; flex: 0 0 auto; }
 .group-table .tname .flag-img, .match .flag-img { margin-right: .1rem; }
 .score { font-weight: 800; font-variant-numeric: tabular-nums; min-width: 1.2em; text-align: right; }
+.score .pens { font-weight: 700; font-size: .72rem; color: var(--muted); }
+/* a knockout settled on penalties: highlight the winning side and the shootout score */
+.match-teams .row.win .name { color: var(--green-dark); }
+.match-teams .row.win .score { color: var(--green); }
+.match-pens { color: var(--muted); font-size: .78rem; margin-top: .4rem; font-weight: 600; }
 .match-venue { color: var(--muted); font-size: .8rem; margin-top: .55rem; border-top: 1px dashed var(--line); padding-top: .45rem; }
 
 .empty, .loading { color: var(--muted); }

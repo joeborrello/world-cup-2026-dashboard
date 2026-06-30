@@ -16,6 +16,7 @@ import os
 import subprocess
 from datetime import date, datetime, timezone
 
+import compute
 import config
 import db
 import live
@@ -53,6 +54,11 @@ def _today(conn):
             "team1": t1, "team2": t2,
             "code1": flag_code(m["team1"]), "code2": flag_code(m["team2"]),
             "score1": m["score1"], "score2": m["score2"],
+            # a knockout settled on penalties carries the shootout score so the
+            # landing strip can name the winner instead of showing a bare draw.
+            "pen1": m["pen1"], "pen2": m["pen2"],
+            "winner_side": compute.winner_side(
+                m["score1"], m["score2"], m["pen1"], m["pen2"]),
             "status": m["status"],          # scheduled | finished
             "state": None,                  # in_play | paused (live only)
             "utc_datetime": m["utc_datetime"],
