@@ -432,6 +432,16 @@ def _project(agg, overrides):
             if not t1 or not t2:
                 res[num] = {"team1": t1, "team2": t2, "winner": None, "loser": None}
                 continue
+            # A knockout the feed has already FINISHED but left level with no
+            # shootout recorded is genuinely undecided — not a projection to make.
+            # Advancing the Elo favorite here is exactly the "premature bracket
+            # update" that kept showing Germany beating Paraguay in the projected
+            # bracket before the shootout (p) landed (and even while the cache held
+            # the pre-shootout aggregate). Leave the winner pending — the real
+            # result will arrive from a data source — rather than fabricate one.
+            if m.get("status") == "finished":
+                res[num] = {"team1": t1, "team2": t2, "winner": None, "loser": None}
+                continue
             # favored winner of the *projected* pairing advances (Elo == model pick),
             # unless the user has forced one of the two competitors to advance.
             forced = overrides.get(num)
@@ -482,9 +492,20 @@ _cache = {"key": None, "agg": None}
 
 
 def _aggregate_cached(conn, sims, seed):
-    n_fin = conn.execute(
-        "SELECT COUNT(*) FROM matches WHERE status='finished'").fetchone()[0]
-    key = (n_fin, sims, seed)
+    # Key on a signature of the actual finished RESULTS, not merely how many are
+    # finished. A knockout whose result is *corrected in place* — a wrong winner
+    # fixed, or a penalty shootout back-filled (JOE-16) — leaves the finished
+    # COUNT unchanged, so a count-only key let a long-running gunicorn keep
+    # serving the stale projected bracket (e.g. Germany still shown advancing past
+    # Paraguay) until the next restart. Summing the scoreline + penalties makes
+    # any result change bust the cache.
+    sig = conn.execute(
+        "SELECT COUNT(*), COALESCE(SUM("
+        "  num * 1000003"
+        "  + COALESCE(score1, 0) * 1009 + COALESCE(score2, 0) * 911"
+        "  + COALESCE(pen1, 0) * 53 + COALESCE(pen2, 0) * 31), 0) "
+        "FROM matches WHERE status='finished'").fetchone()
+    key = (sig[0], sig[1], sims, seed)
     with _lock:
         if _cache["key"] == key and _cache["agg"] is not None:
             return _cache["agg"]
