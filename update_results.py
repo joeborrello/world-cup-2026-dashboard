@@ -177,12 +177,37 @@ def _decide_football_data(sc, home, away, team1, team2, is_knockout):
     return None  # level knockout with no winner named yet -> not actually settled
 
 
-def _update_from_football_data(conn):
-    """Best-effort in-play overlay from football-data.org. Silent no-op without a key.
+def _undecided_knockout(row):
+    """True when ``row`` is a knockout the DB has marked finished but LEFT LEVEL
+    with no shootout recorded — i.e. not actually resolved.
 
-    openfootball is authoritative for final results; this only surfaces scores
-    for matches openfootball hasn't already settled, and only when team names
-    align — so it can speed up live scores without ever corrupting a final.
+    openfootball's community feed regularly publishes a knockout's full-/extra-time
+    score (``ft``/``et``) minutes-to-hours before it back-fills the penalty
+    shootout (``p``). In that window the match is ``finished`` and level (e.g.
+    Germany-Paraguay 1-1) with ``pen1``/``pen2`` still NULL, so ``winner_side`` is
+    None and the bracket can't advance. We must keep consulting the OTHER data
+    source (football-data, which names the shootout winner) to break that tie
+    instead of treating the match as off-limits the instant openfootball finishes
+    it (JOE-16)."""
+    return (
+        row["stage"] == "knockout"
+        and row["status"] == "finished"
+        and row["score1"] is not None
+        and row["score1"] == row["score2"]
+        and row["pen1"] is None
+        and row["pen2"] is None
+    )
+
+
+def _update_from_football_data(conn):
+    """Best-effort overlay from football-data.org. Silent no-op without a key.
+
+    openfootball is authoritative for final SCORES; this surfaces scores for
+    matches openfootball hasn't settled, and — crucially — is still queried to
+    supply the penalty-shootout winner for a knockout openfootball finished as a
+    level result without one (so every data source is consulted before the
+    bracket stalls or advances the wrong side). It only ever acts when team names
+    align, so it can never corrupt a final.
     """
     if not config.FOOTBALL_DATA_API_KEY:
         return 0
@@ -216,13 +241,18 @@ def _update_from_football_data(conn):
         except ValueError:
             continue
         row = conn.execute(
-            "SELECT num, team1, team2, status, stage FROM matches WHERE utc_datetime=?",
+            "SELECT num, team1, team2, status, stage, score1, score2, pen1, pen2 "
+            "FROM matches WHERE utc_datetime=?",
             (key,)
         ).fetchone()
         if row is None:
             continue
-        if row["status"] == "finished":
-            continue  # openfootball owns finals — don't overwrite a settled result
+        # openfootball owns a SETTLED final, but a knockout it finished as a level
+        # result with no shootout is NOT settled — keep querying football-data for
+        # the missing penalty winner so the bracket isn't left stalled (JOE-16).
+        backfill_pens = _undecided_knockout(row)
+        if row["status"] == "finished" and not backfill_pens:
+            continue
         home, away = (fx.get("homeTeam") or {}).get("name"), (fx.get("awayTeam") or {}).get("name")
         decided = _decide_football_data(
             sc, home, away, row["team1"], row["team2"],
@@ -230,11 +260,22 @@ def _update_from_football_data(conn):
         if decided is None:
             continue  # can't align teams or no settled winner — skip, don't corrupt
         s1, s2, pen1, pen2 = decided
-        conn.execute(
-            "UPDATE matches SET score1=?, score2=?, pen1=?, pen2=?, status='finished' "
-            "WHERE num=?",
-            (s1, s2, pen1, pen2, row["num"]),
-        )
+        if backfill_pens:
+            # Only break the tie — never rewrite openfootball's authoritative
+            # scoreline. Require both feeds to agree the match is level and that
+            # football-data actually names a shootout winner, else leave it alone.
+            if (s1, s2) != (row["score1"], row["score2"]) or (pen1 is None and pen2 is None):
+                continue
+            conn.execute(
+                "UPDATE matches SET pen1=?, pen2=? WHERE num=?",
+                (pen1, pen2, row["num"]),
+            )
+        else:
+            conn.execute(
+                "UPDATE matches SET score1=?, score2=?, pen1=?, pen2=?, status='finished' "
+                "WHERE num=?",
+                (s1, s2, pen1, pen2, row["num"]),
+            )
         changed += 1
     conn.commit()
     return changed
