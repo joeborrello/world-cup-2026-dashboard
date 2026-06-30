@@ -28,6 +28,20 @@ import compute
 import config
 import ratings
 
+
+def _finished_decision(m):
+    """(winner, loser) for a knockout match the feed has decisively settled, or
+    None when it isn't — unplayed, or level with the penalty shootout not yet in
+    the data. Penalties break a regulation/extra-time tie, so a 1-1 that went to
+    a shootout no longer silently advances team1 (JOE-16)."""
+    if m["status"] != "finished" or m["score1"] is None:
+        return None
+    side = compute.winner_side(m["score1"], m["score2"], m.get("pen1"), m.get("pen2"))
+    if side is None:
+        return None
+    t1, t2 = m["team1"], m["team2"]
+    return (t1, t2) if side == 1 else (t2, t1)
+
 SIMS = getattr(config, "PREDICT_SIMS", 8000)
 
 # Default RNG seed. A fixed seed makes the Monte-Carlo odds deterministic for a
@@ -224,9 +238,10 @@ def _sim_once(group_fixtures, ko, third_slots, R):
 
     for m in ko:
         num = m["num"]
-        if m["status"] == "finished" and m["score1"] is not None:
+        decided = _finished_decision(m)
+        if decided:
             t1, t2 = m["team1"], m["team2"]
-            w, l = (t1, t2) if m["score1"] >= m["score2"] else (t2, t1)
+            w, l = decided
         else:
             t1 = from_slot(m["slot1"], num, "team1")
             t2 = from_slot(m["slot2"], num, "team2")
@@ -257,10 +272,11 @@ def _aggregate(conn, sims):
     ko = [
         {"num": r["num"], "slot1": r["team1_slot"], "slot2": r["team2_slot"],
          "status": r["status"], "team1": r["team1"], "team2": r["team2"],
-         "score1": r["score1"], "score2": r["score2"]}
+         "score1": r["score1"], "score2": r["score2"],
+         "pen1": r["pen1"], "pen2": r["pen2"]}
         for r in conn.execute(
-            "SELECT num, team1_slot, team2_slot, status, team1, team2, score1, score2 "
-            "FROM matches WHERE stage='knockout' ORDER BY num")
+            "SELECT num, team1_slot, team2_slot, status, team1, team2, "
+            "score1, score2, pen1, pen2 FROM matches WHERE stage='knockout' ORDER BY num")
     ]
     third_slots = []
     for m in ko:
@@ -406,9 +422,10 @@ def _project(agg, overrides):
     ko_meta = {m["num"]: m for m in ko}
     for num in sorted(ko_meta):
         m = ko_meta[num]
-        if m["status"] == "finished" and m["score1"] is not None:
+        decided = _finished_decision(m)
+        if decided:
             t1, t2 = m["team1"], m["team2"]
-            w, l = (t1, t2) if m["score1"] >= m["score2"] else (t2, t1)
+            w, l = decided
         else:
             t1 = _resolve(m["slot1"], num, "team1")
             t2 = _resolve(m["slot2"], num, "team2")
@@ -430,9 +447,10 @@ def _project(agg, overrides):
     for num in slot_counts:
         entry = {"round": round_of(num)}
         m = ko_meta.get(num)
-        # a finished match has a settled winner — it can't be re-picked, so mark
-        # it locked (the UI shows it non-interactive instead of swallowing clicks)
-        entry["locked"] = bool(m and m["status"] == "finished" and m["score1"] is not None)
+        # a decisively-settled match (a real winner, penalties included) can't be
+        # re-picked, so mark it locked (the UI shows it non-interactive instead of
+        # swallowing clicks)
+        entry["locked"] = bool(m and _finished_decision(m))
         r = res.get(num, {})
         for side in ("team1", "team2"):
             team = r.get(side)

@@ -91,12 +91,20 @@ def normalize(raw):
 
         local_time, offset, utc_iso = _parse_time(mt["date"], mt.get("time"))
 
+        # openfootball records a knockout that goes the distance across several
+        # keys: ht (half time), ft (90'), et (after extra time), p (shootout).
+        # The score that *stands* is the extra-time score when there was extra
+        # time, else the full-time score; a level result is then decided by the
+        # penalty shootout (p). Reading ft alone stored Germany-Paraguay as a 1-1
+        # draw and handed the tie to the wrong side (JOE-16).
         score = mt.get("score") or {}
-        ft = score.get("ft")
-        if ft and len(ft) == 2:
-            score1, score2, status = ft[0], ft[1], "finished"
+        et, ft, pens = score.get("et"), score.get("ft"), score.get("p")
+        standing = et if (et and len(et) == 2) else ft
+        if standing and len(standing) == 2:
+            score1, score2, status = standing[0], standing[1], "finished"
         else:
             score1, score2, status = None, None, "scheduled"
+        pen1, pen2 = (pens[0], pens[1]) if (pens and len(pens) == 2) else (None, None)
 
         # For group matches the slots ARE the team names.
         team1_slot = mt["team1"]
@@ -121,6 +129,8 @@ def normalize(raw):
             "team2": team2,
             "score1": score1,
             "score2": score2,
+            "pen1": pen1,
+            "pen2": pen2,
             "status": status,
         })
     return out

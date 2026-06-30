@@ -235,12 +235,18 @@ def test_finished_knockout_match_is_locked_and_not_overridable(conn):
     base = predict.projected_bracket(conn, {}, sims=SIMS, seed=SEED)['slots']
     num, t1, t2 = _resolved_r32(base)
     orig = conn.execute(
-        "SELECT status, score1, score2 FROM matches WHERE num=?", (num,)).fetchone()
+        "SELECT status, score1, score2, team1, team2 FROM matches WHERE num=?",
+        (num,)).fetchone()
     try:
-        # play the match: t1 beats t2 (team1/team2 in the row are the real teams)
+        # Play the match: t1 beats t2. A genuinely *played* knockout match always
+        # has two concrete competitors, so we pin team1/team2 to the projected
+        # pairing as well — on an offline seed the groups feeding this R32 slot
+        # aren't complete, so the row would otherwise carry NULL teams and there'd
+        # be no result to lock.
         conn.execute(
-            "UPDATE matches SET status='finished', score1=2, score2=0 WHERE num=?",
-            (num,))
+            "UPDATE matches SET status='finished', score1=2, score2=0, "
+            "team1=?, team2=? WHERE num=?",
+            (t1, t2, num))
         conn.commit()
         out = predict.projected_bracket(conn, {num: t2}, sims=SIMS, seed=SEED)
         assert out['slots'][num].get('locked') is True, \
@@ -251,8 +257,10 @@ def test_finished_knockout_match_is_locked_and_not_overridable(conn):
         assert out['slots'][num]['team1']['team'] == t1
     finally:
         conn.execute(
-            "UPDATE matches SET status=?, score1=?, score2=? WHERE num=?",
-            (orig['status'], orig['score1'], orig['score2'], num))
+            "UPDATE matches SET status=?, score1=?, score2=?, team1=?, team2=? "
+            "WHERE num=?",
+            (orig['status'], orig['score1'], orig['score2'],
+             orig['team1'], orig['team2'], num))
         conn.commit()
 
 

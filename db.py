@@ -35,8 +35,10 @@ CREATE TABLE IF NOT EXISTS matches (
     team2_slot   TEXT,
     team1        TEXT,                  -- resolved team name (NULL if unknown)
     team2        TEXT,
-    score1       INTEGER,
+    score1       INTEGER,               -- goals after regulation/extra time
     score2       INTEGER,
+    pen1         INTEGER,               -- penalty-shootout goals (NULL if none)
+    pen2         INTEGER,
     status       TEXT                   -- 'scheduled' | 'finished'
 );
 
@@ -77,6 +79,7 @@ def connect():
 def init_schema(conn):
     conn.executescript(SCHEMA)
     _migrate_venue_roof(conn)
+    _migrate_match_penalties(conn)
     conn.commit()
 
 
@@ -97,3 +100,17 @@ def _migrate_venue_roof(conn):
     for ground, v in VENUES.items():
         conn.execute("UPDATE venues SET roof=? WHERE ground=?",
                      (v.get("roof"), ground))
+
+
+def _migrate_match_penalties(conn):
+    """Add the pen1/pen2 penalty-shootout columns to an already-seeded DB.
+
+    CREATE TABLE IF NOT EXISTS never alters an existing table, so a production DB
+    seeded before the shootout fix (JOE-16) has no penalty columns. Without them
+    a knockout decided on penalties looks like a draw and the bracket advances the
+    wrong team. Idempotent: a no-op once the columns exist.
+    """
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(matches)")}
+    for col in ("pen1", "pen2"):
+        if col not in cols:
+            conn.execute(f"ALTER TABLE matches ADD COLUMN {col} INTEGER")

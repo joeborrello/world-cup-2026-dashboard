@@ -44,12 +44,13 @@ def seed(prefer_remote=True):
             """INSERT INTO matches
                (num, stage, round_label, group_letter, date, local_time,
                 utc_offset, utc_datetime, ground, team1_slot, team2_slot,
-                team1, team2, score1, score2, status)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                team1, team2, score1, score2, pen1, pen2, status)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
             (m["num"], m["stage"], m["round_label"], m["group_letter"],
              m["date"], m["local_time"], m["utc_offset"], m["utc_datetime"],
              m["ground"], m["team1_slot"], m["team2_slot"], m["team1"],
-             m["team2"], m["score1"], m["score2"], m["status"]),
+             m["team2"], m["score1"], m["score2"], m["pen1"], m["pen2"],
+             m["status"]),
         )
 
     # teams + group membership (from group-stage fixtures)

@@ -15,6 +15,7 @@ from datetime import date, datetime, timedelta
 from flask import Flask, jsonify, render_template, request
 
 import alerts
+import compute
 import config
 import db
 import goldenboot
@@ -98,6 +99,9 @@ def _match_dict(m, venues):
         'team2_resolved': m['team2'] is not None,
         'team1_code': flag_code(m['team1']), 'team2_code': flag_code(m['team2']),
         'score1': m['score1'], 'score2': m['score2'],
+        'pen1': m['pen1'], 'pen2': m['pen2'],
+        'winner_side': compute.winner_side(
+            m['score1'], m['score2'], m['pen1'], m['pen2']),
         'status': m['status'],
         'ground': m['ground'], 'stadium': v.get('stadium'),
         'city': v.get('city'), 'country': v.get('country'),
