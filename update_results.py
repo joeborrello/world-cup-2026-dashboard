@@ -44,8 +44,23 @@ def _update_from_openfootball(conn, prefer_remote=True):
         # pen1/pen2 are part of the result: a knockout that goes to a shootout has
         # a level score and is settled only by the penalties, so they must sync
         # too or the bracket can't tell who advanced (JOE-16).
-        if (cur["score1"], cur["score2"], cur["pen1"], cur["pen2"], cur["status"]) != (
-                m["score1"], m["score2"], m["pen1"], m["pen2"], m["status"]):
+        result_changed = (
+            cur["score1"], cur["score2"], cur["pen1"], cur["pen2"], cur["status"]
+        ) != (m["score1"], m["score2"], m["pen1"], m["pen2"], m["status"])
+        # Never let a source that simply LACKS this result downgrade one the DB
+        # already has. The REMOTE openfootball feed is authoritative, but on a
+        # remote-fetch outage fetch_raw() falls back to the committed offline
+        # snapshot, which carries no knockout results. Syncing that verbatim would
+        # wipe a finished shootout (Germany 1-1 Paraguay, pens 3-4) back to
+        # "scheduled" — and once num 74 is unplayed again the projected bracket
+        # re-advances the Elo favorite (Germany) past a tie Paraguay actually won,
+        # which is exactly the premature bracket update this issue is about. Only
+        # sync when the feed is at least as resolved as the DB: a brand-new result
+        # (DB not finished) or a real correction (still finished), never
+        # finished -> unplayed (JOE-16).
+        of_finished = m["status"] == "finished" and m["score1"] is not None
+        db_finished = cur["status"] == "finished" and cur["score1"] is not None
+        if result_changed and not (db_finished and not of_finished):
             sets += ["score1=?", "score2=?", "pen1=?", "pen2=?", "status=?"]
             params += [m["score1"], m["score2"], m["pen1"], m["pen2"], m["status"]]
         # Adopt openfootball's authoritative 3rd-place R32 assignment: once a

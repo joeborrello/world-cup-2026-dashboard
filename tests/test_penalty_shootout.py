@@ -512,3 +512,133 @@ def test_projection_cache_holds_when_nothing_changed(monkeypatch):
         assert calls["n"] == 1
     finally:
         predict._cache.update(key=None, agg=None)
+
+
+# ── 9. the PRIMARY openfootball sync decides the match end-to-end ─────────────
+# The reported bug is about the Germany-Paraguay *result*, and openfootball is the
+# authoritative SCORE source — so the chain that actually settles this match in
+# production is _update_from_openfootball -> compute.recompute_all, not just the
+# normalize/overlay units tested above. These pin that whole chain, and the
+# remote-outage path that kept re-introducing the wrong winner.
+
+def _run_openfootball(conn, feed_matches):
+    """Drive _update_from_openfootball with a stubbed feed (positions -> nums)."""
+    with mock.patch.object(data_source, "fetch_raw",
+                           return_value={"matches": feed_matches}), \
+            mock.patch.object(update_results.goldenboot, "rebuild_scorers"):
+        return update_results._update_from_openfootball(conn)
+
+
+def _of_ger_par(score):
+    """A raw openfootball match dict for Germany-Paraguay with the given score."""
+    return {"round": "Round of 32", "group": None, "date": "2026-06-29",
+            "time": "16:00 UTC+0", "ground": "any",
+            "team1": "Germany", "team2": "Paraguay", "score": score}
+
+
+def _of_next():
+    """The Round-of-16 feeder (W1) that the GER-PAR winner flows into."""
+    return {"round": "Round of 16", "group": None, "date": "2026-07-04",
+            "time": "16:00 UTC+0", "ground": "any",
+            "team1": "W1", "team2": "W3", "score": {}}
+
+
+def _db_ko_pair():
+    """DB with the GER-PAR knockout at num 1 and its W1 feeder at num 2.
+
+    The knockout teams are already resolved (literal slots, as openfootball
+    publishes once a matchup is decided) so recompute_all keeps them while it
+    advances the *shootout* winner into the W1 feeder."""
+    ger_par = dict(_GER_PAR, num=1, team1_slot="Germany", team2_slot="Paraguay")
+    nxt = dict(_NEXT, num=2, team1_slot="W1", team2_slot="W3")
+    ger_par.update(score1=None, score2=None, pen1=None, pen2=None, status="scheduled")
+    return _conn_with([ger_par, nxt])
+
+
+def test_openfootball_sync_advances_shootout_winner_end_to_end():
+    # openfootball publishes the level extra-time score AND the shootout (p) — the
+    # full result. The primary sync must store the penalties and the bracket must
+    # advance Paraguay, never Germany.
+    conn = _db_ko_pair()
+    _run_openfootball(conn, [_of_ger_par({"ft": [1, 1], "et": [1, 1], "p": [3, 4]}),
+                             _of_next()])
+    row = conn.execute(
+        "SELECT score1, score2, pen1, pen2, status FROM matches WHERE num=1"
+    ).fetchone()
+    assert (row["score1"], row["score2"], row["pen1"], row["pen2"]) == (1, 1, 3, 4)
+    assert compute.winner_side(                           # Paraguay won the tie
+        row["score1"], row["score2"], row["pen1"], row["pen2"]) == 2
+
+    compute.recompute_all(conn)
+    nxt = conn.execute("SELECT team1 FROM matches WHERE num=2").fetchone()
+    assert nxt["team1"] == "Paraguay"                     # NOT Germany
+
+
+def test_openfootball_outage_does_not_wipe_a_finished_shootout():
+    # On a remote-fetch outage fetch_raw() falls back to the committed offline
+    # snapshot, which carries NO knockout results. Re-syncing that must NOT reset
+    # an already-finished shootout to "scheduled": that un-resolves the bracket and
+    # lets the projected view re-advance the Elo favorite (Germany) past the tie
+    # Paraguay won — the premature update the reviewer kept seeing (JOE-16).
+    ger_par = dict(_GER_PAR, num=1, team1_slot="1E")      # finished 1-1, pens 3-4
+    nxt = dict(_NEXT, num=2, team1_slot="W1", team2_slot="W3", team1="Paraguay")
+    conn = _conn_with([ger_par, nxt])
+
+    # the stale snapshot still shows the knockout as an undecided placeholder
+    changed = _run_openfootball(
+        conn, [{"round": "Round of 32", "group": None, "date": "2026-06-29",
+                "time": "16:00 UTC+0", "ground": "any",
+                "team1": "2A", "team2": "3A/B/C/D/F", "score": {}},
+               _of_next()])
+    assert changed == 0                                   # nothing downgraded
+    row = conn.execute(
+        "SELECT score1, score2, pen1, pen2, status FROM matches WHERE num=1"
+    ).fetchone()
+    assert (row["score1"], row["score2"], row["pen1"], row["pen2"], row["status"]) \
+        == (1, 1, 3, 4, "finished")                       # result preserved
+
+
+def test_openfootball_sync_still_applies_new_results_and_corrections():
+    # The guard must only block finished -> unplayed, never a real update.
+    # (a) a brand-new result lands on a scheduled match
+    conn = _db_ko_pair()
+    _run_openfootball(conn, [_of_ger_par({"ft": [2, 0]}), _of_next()])
+    row = conn.execute(
+        "SELECT score1, score2, status FROM matches WHERE num=1").fetchone()
+    assert (row["score1"], row["score2"], row["status"]) == (2, 0, "finished")
+
+    # (b) a wrong finished score is corrected in place (stays finished)
+    _run_openfootball(conn, [_of_ger_par({"ft": [3, 1]}), _of_next()])
+    row = conn.execute(
+        "SELECT score1, score2, status FROM matches WHERE num=1").fetchone()
+    assert (row["score1"], row["score2"], row["status"]) == (3, 1, "finished")
+
+
+def test_real_offline_snapshot_fallback_preserves_the_shootout_and_bracket():
+    # The exact production reproduction. On a remote-fetch outage the live cron's
+    # _update_from_openfootball(prefer_remote=...) falls back to the *committed*
+    # offline snapshot (data/openfootball-2026.json), where match 74 is still the
+    # bare "1E vs 3A/B/C/D/F" placeholder with no score. Re-syncing that against a
+    # DB that already has Germany 1-1 Paraguay (pens 3-4, Paraguay through) must
+    # NOT wipe the result — otherwise the projected bracket re-advances Germany,
+    # the wrong winner the reviewer kept seeing (JOE-16). This drives the real
+    # fetch_raw + normalize path against the shipped data, not a stub.
+    ger_par = dict(_GER_PAR, num=74, team1_slot="Germany", team2_slot="Paraguay")
+    nxt = dict(_NEXT, num=89, team1_slot="W74", team2_slot="W77")
+    conn = _conn_with([ger_par, nxt])
+
+    with mock.patch.object(update_results.goldenboot, "rebuild_scorers"):
+        # prefer_remote=False forces the offline-snapshot branch fetch_raw takes
+        # on a real outage — no network, the genuine shipped JSON.
+        changed = update_results._update_from_openfootball(conn, prefer_remote=False)
+
+    assert changed == 0                                   # the stale snapshot is ignored
+    row = conn.execute(
+        "SELECT score1, score2, pen1, pen2, status FROM matches WHERE num=74"
+    ).fetchone()
+    assert (row["score1"], row["score2"], row["pen1"], row["pen2"], row["status"]) \
+        == (1, 1, 3, 4, "finished")
+
+    compute.recompute_all(conn)
+    nxt_row = conn.execute("SELECT team1 FROM matches WHERE num=89").fetchone()
+    assert nxt_row["team1"] == "Paraguay"                 # NOT Germany
