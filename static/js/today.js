@@ -10,15 +10,10 @@
 
   // The day "rolls over" at 2am local, not midnight: a match that kicks off
   // between 00:00 and 01:59 (e.g. a midnight-ET game) still counts as the
-  // previous day's slate — i.e. it's still "tonight" before bedtime. Shifting
-  // by -2h before taking the calendar date does this; applied via keyOf to both
-  // the matches AND "now" so the comparison stays consistent.
-  const ROLLOVER_HOURS = 2;
-  const pad = n => String(n).padStart(2, '0');
-  const keyOf = d => {
-    const s = new Date(d.getTime() - ROLLOVER_HOURS * 3600 * 1000);
-    return `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`;
-  };
+  // previous day's slate — i.e. it's still "tonight" before bedtime. WCDay.key
+  // does the -2h shift, applied to both the matches AND "now" so the comparison
+  // stays consistent; the daily map (map.js) keys off the same WCDay helper.
+  const keyOf = WCDay.key;
   const human = key => {
     const [y, m, d] = key.split('-').map(Number);
     return new Date(y, m - 1, d).toLocaleDateString(undefined,
@@ -37,7 +32,7 @@
   });
 
   const days = Object.keys(byDay).sort();
-  const todayKey = keyOf(new Date());
+  const todayKey = WCDay.today();
   const target = byDay[todayKey] ? todayKey
     : days.find(k => k > todayKey) || days.filter(k => k < todayKey).pop() || null;
 
