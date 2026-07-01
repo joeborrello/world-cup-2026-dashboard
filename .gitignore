@@ -21,3 +21,6 @@ data/*.db-wal
 # OS / editor
 .DS_Store
 *.swp
+
+# agent journal — local to the live checkout (untracked so deploys stay clean)
+SESSIONS.md

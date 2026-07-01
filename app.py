@@ -566,7 +566,7 @@ def api_pundits_budget():
     conn = db.connect()
     bs = pundits.budget_status(conn)
     conn.close()
-    bs['enabled'] = bool(config.ANTHROPIC_API_KEY)
+    bs['enabled'] = pundits.available()
     return jsonify(bs)
 
 

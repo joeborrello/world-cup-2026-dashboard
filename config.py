@@ -68,7 +68,7 @@ PREDICT_ELO_K = float(os.environ.get('PREDICT_ELO_K', '60'))
 # Optional: Anthropic key enables the MiroFish-inspired "AI pundit panel".
 # Statistical predictions work fully without it.
 ANTHROPIC_API_KEY = os.environ.get('ANTHROPIC_API_KEY', '')
-PUNDIT_MODEL = os.environ.get('PUNDIT_MODEL', 'claude-haiku-4-5')
+PUNDIT_MODEL = os.environ.get('PUNDIT_MODEL', 'claude-fable-5')
 
 # Pundit cost controls (cache hits are free and don't count). A fresh generation
 # is blocked once EITHER the daily call cap OR the self-tracked monthly $ budget

@@ -1,18 +1,29 @@
 """MiroFish-inspired "AI pundit panel".
 
 A small swarm of opinionated personas (the idea borrowed from MiroFish's
-multi-agent simulation) debates a group or the title race via the Claude API,
+multi-agent simulation) debates a group or the title race via Claude,
 *grounded in the statistical model's numbers* so the narrative rides on the
 odds rather than replacing them. Generation is lazy (on user request) and
 persisted in `pundit_cache` so we don't re-pay the LLM until results change.
 
-Degrades gracefully: with no ANTHROPIC_API_KEY the panel is simply unavailable
-and the statistical predictions are unaffected.
+Claude access is the `claude` CLI in print mode, authenticated with Joe's Claude
+Max (5x) subscription (~/.claude OAuth login) — NOT the pay-as-you-go API. We
+strip ANTHROPIC_API_KEY from the subprocess env so a key in the environment can
+never silently switch billing to the API account. The self-tracked $ budget is
+therefore informational (API-equivalent cost), kept as a usage guardrail.
+
+Degrades gracefully: with no claude CLI the panel is simply unavailable and the
+statistical predictions are unaffected.
 """
 
 import hashlib
 import json
+import os
+import shutil
+import subprocess
+import tempfile
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import compute
 import config
@@ -25,6 +36,49 @@ PRICING = {
     "claude-haiku-4-5": (1.0, 5.0), "claude-fable-5": (10.0, 50.0),
 }
 DEFAULT_PRICING = (5.0, 25.0)
+
+
+def available() -> bool:
+    """The panel needs the claude CLI (subscription login) on the server."""
+    return shutil.which("claude") is not None
+
+
+def _claude_cli(system, user_content):
+    """One single-shot `claude -p` call on the Max subscription: all tools disabled,
+    MCP pinned off, API key stripped so the ~/.claude login is used (never API billing).
+    Returns (text, usage) — usage has .input_tokens/.output_tokens for _log_call."""
+    env = os.environ.copy()
+    env.pop("ANTHROPIC_API_KEY", None)   # critical: subscription login, not the key
+    sysfile = None
+    try:
+        with tempfile.NamedTemporaryFile("w", suffix=".txt", delete=False,
+                                         encoding="utf-8") as f:
+            f.write(system)
+            sysfile = f.name
+        proc = subprocess.run(
+            [shutil.which("claude"), "-p", "--output-format", "json",
+             "--model", config.PUNDIT_MODEL,
+             "--system-prompt-file", sysfile, "--strict-mcp-config",
+             "--disallowed-tools", "Bash", "Edit", "Write", "Read", "Glob", "Grep",
+             "WebSearch", "WebFetch", "Task", "NotebookEdit", "TodoWrite"],
+            input=user_content, capture_output=True, text=True, timeout=300, env=env)
+    finally:
+        if sysfile:
+            try:
+                os.unlink(sysfile)
+            except OSError:
+                pass
+    try:
+        data = json.loads(proc.stdout.strip())
+    except json.JSONDecodeError:
+        raise RuntimeError((proc.stderr or proc.stdout or "no CLI output")[:300])
+    if data.get("is_error") or data.get("type") != "result":
+        raise RuntimeError(str(data.get("result") or data.get("error")
+                               or "claude CLI error")[:300])
+    u = data.get("usage") or {}
+    usage = SimpleNamespace(input_tokens=int(u.get("input_tokens") or 0),
+                            output_tokens=int(u.get("output_tokens") or 0))
+    return (data.get("result") or "").strip(), usage
 
 PERSONAS = [
     ("The Analyst", "trusts the data and Elo/probability model above all"),
@@ -155,9 +209,9 @@ def _scope_title(scope):
 
 def panel(conn, scope):
     """Return the pundit panel for a scope ('group:A' | 'knockout'), cached."""
-    if not config.ANTHROPIC_API_KEY:
+    if not available():
         return {"available": False,
-                "message": "Set ANTHROPIC_API_KEY to enable the AI pundit panel."}
+                "message": "The claude CLI is not on the server — the AI pundit panel is unavailable."}
 
     _ensure_cache(conn)
     sh = _state_hash(conn, scope)
@@ -186,14 +240,8 @@ def panel(conn, scope):
     context = _context(conn, preds, scope)
 
     try:
-        import anthropic
-        client = anthropic.Anthropic(api_key=config.ANTHROPIC_API_KEY)
-        msg = client.messages.create(
-            model=config.PUNDIT_MODEL, max_tokens=1600, system=SYSTEM,
-            messages=[{"role": "user", "content":
-                       f"Preview: {_scope_title(scope)}.\n\n{context}"}])
-        _log_call(conn, scope, msg.usage)   # bill it the moment the call succeeds
-        text = "".join(b.text for b in msg.content if getattr(b, "type", "") == "text").strip()
+        text, usage = _claude_cli(SYSTEM, f"Preview: {_scope_title(scope)}.\n\n{context}")
+        _log_call(conn, scope, usage)   # bill it the moment the call succeeds
         if text.startswith("```"):
             text = text.strip("`").split("\n", 1)[-1].rsplit("```", 1)[0]
         data = json.loads(text)
