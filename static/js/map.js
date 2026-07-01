@@ -55,21 +55,67 @@
     return `<span class="roof ${r.cls}" title="${r.title}">${r.icon} ${r.label}</span>`;
   }
 
+  // ── future match-ups (knockout fixtures not yet decided) ─────────────────────
+  // Before a knockout slot resolves to a real team, the API sends the teams that
+  // *may* fill it (projected-bracket sims) as `team{1,2}_candidates`. We preview
+  // those instead of a bare "?" / slot placeholder like "1E" or "W74".
+  const esc = s => (s || '').replace(/"/g, '&quot;');
+  const pct = p => Math.round(p * 100) + '%';
+
+  // Humanize a raw slot for the "not decided yet" label.
+  function slotLabel(slot) {
+    let m;
+    if ((m = /^1([A-L])$/.exec(slot))) return `Winner Grp ${m[1]}`;
+    if ((m = /^2([A-L])$/.exec(slot))) return `Runner-up Grp ${m[1]}`;
+    if ((m = /^3([A-L/]+)$/.exec(slot))) return `3rd place ${m[1]}`;
+    if ((m = /^W(\d+)$/.exec(slot))) return `Winner match ${m[1]}`;
+    if ((m = /^L(\d+)$/.exec(slot))) return `Loser match ${m[1]}`;
+    return slot || 'TBD';
+  }
+  function candTitle(name, cands) {
+    return `${slotLabel(name)} — may play: ` +
+      cands.map(c => `${c.team} ${pct(c.p)}`).join(', ');
+  }
+  const resolved = (m, side) => m[side + '_resolved'];
+  const sideName = (m, side) => side === 'team1' ? m.team1 : m.team2;
+  const sideCode = (m, side) => side === 'team1' ? m.team1_code : m.team2_code;
+  const sideCands = (m, side) => side === 'team1' ? m.team1_candidates : m.team2_candidates;
+
   // ── pins ────────────────────────────────────────────────────────────────────
   function pinFlag(code, name) {
     if (!code) return '<span class="fp-tbd">?</span>';
-    const n = (name || '').replace(/"/g, '&quot;');
+    const n = esc(name);
     return `<img class="fp-flag" src="https://flagcdn.com/${code}.svg" alt="${n}" title="${n}">`;
+  }
+  // One side on the pin: the resolved flag, else the leading candidate's flag
+  // dimmed with a "?" corner (full odds in the title), else a plain "?".
+  function pinSide(m, side) {
+    if (resolved(m, side)) return pinFlag(sideCode(m, side), sideName(m, side));
+    const cands = sideCands(m, side);
+    if (cands && cands.length) {
+      const top = cands[0];
+      return `<span class="fp-maybe" title="${esc(candTitle(sideName(m, side), cands))}">` +
+        `${pinFlag(top.code, top.team)}<i class="fp-q">?</i></span>`;
+    }
+    return pinFlag(null, sideName(m, side));
   }
   function flagPin(matches, wx) {
     const rows = matches.map(m =>
-      `<div class="fp-row">${pinFlag(m.team1_code, m.team1)}` +
-      `<span class="fp-v">v</span>${pinFlag(m.team2_code, m.team2)}${wxChip(wx[m.num])}</div>`).join('');
+      `<div class="fp-row">${pinSide(m, 'team1')}` +
+      `<span class="fp-v">v</span>${pinSide(m, 'team2')}${wxChip(wx[m.num])}</div>`).join('');
     const w = 104, h = matches.length * 21 + 14;
     return L.divIcon({
       html: `<div class="fp-pin">${rows}<i class="fp-stem"></i></div>`,
       className: 'fp-wrap', iconSize: [w, h], iconAnchor: [w / 2, h],
     });
+  }
+  // One side in the popup: resolved name, else the candidate names + odds.
+  function popSide(m, side) {
+    if (resolved(m, side)) return `${wcFlag(sideCode(m, side), sideName(m, side))}${sideName(m, side)}`;
+    const cands = sideCands(m, side);
+    if (!cands || !cands.length) return sideName(m, side);
+    const chips = cands.map(c => `${wcFlag(c.code, c.team)}${c.team} ${pct(c.p)}`).join(' / ');
+    return `<span class="pop-maybe" title="${esc(slotLabel(sideName(m, side)))}">${chips}</span>`;
   }
   function popupHtml(matches, wx) {
     const v = matches[0];
@@ -79,10 +125,25 @@
       const sc = m.status === 'finished' ? ` <b>${m.score1}–${m.score2}</b>` : '';
       const tag = m.group ? `Grp ${m.group}` : m.round;
       html += `<div class="pop-match"><span class="pop-tag">${tag}</span> ${WCTime.time(m.utc_datetime)} ` +
-        `${wcFlag(m.team1_code, m.team1)}${m.team1} v ${wcFlag(m.team2_code, m.team2)}${m.team2}${sc}` +
+        `${popSide(m, 'team1')} v ${popSide(m, 'team2')}${sc}` +
         wxLine(wx[m.num]) + `</div>`;
     });
     return html;
+  }
+
+  // Candidate flag+name+odds chips for the side panel, joined by "or".
+  function candChips(cands) {
+    return cands.map(c =>
+      `<span class="ml-cand">${wcFlag(c.code, c.team)}${c.team}` +
+      `<span class="ml-cand-p">${pct(c.p)}</span></span>`).join('<span class="ml-or">or</span>');
+  }
+  // One side in the side-panel list: resolved team, else the may-play cluster.
+  function listSide(m, side) {
+    if (resolved(m, side)) return `${wcFlag(sideCode(m, side), sideName(m, side))}${sideName(m, side)}`;
+    const cands = sideCands(m, side);
+    if (!cands || !cands.length) return sideName(m, side);
+    return `<span class="ml-maybe"><span class="ml-maybe-tag">${slotLabel(sideName(m, side))}</span>` +
+      `<span class="ml-cands">${candChips(cands)}</span></span>`;
   }
 
   // ── render one day ──────────────────────────────────────────────────────────
@@ -133,8 +194,8 @@
       const tag = m.group ? `Group ${m.group}` : m.round;
       li.innerHTML = `<div class="ml-top"><span class="ml-tag">${tag}</span>` +
         `<span class="ml-time">${WCTime.time(m.utc_datetime)} ${WCTime.tz}</span></div>` +
-        `<div class="ml-teams">${wcFlag(m.team1_code, m.team1)}${m.team1} <em>v</em> ` +
-        `${wcFlag(m.team2_code, m.team2)}${m.team2} ${sc}</div>` +
+        `<div class="ml-teams">${listSide(m, 'team1')} <em>v</em> ` +
+        `${listSide(m, 'team2')} ${sc}</div>` +
         `<div class="ml-venue">📍 ${m.stadium}, ${m.city} ${roofNote(m.roof)}</div>` + wxLine(wx[m.num]);
       li.addEventListener('click', () => {
         const mk = markers.find(x => {

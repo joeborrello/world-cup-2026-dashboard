@@ -110,6 +110,37 @@ def _match_dict(m, venues):
     }
 
 
+def _attach_candidates(conn, matches):
+    """For knockout fixtures whose teams aren't decided yet, attach the teams that
+    *may* end up playing so the daily map can preview a real matchup instead of a
+    bare slot placeholder ("1E", "W74"). Each undecided side gets a
+    `team{1,2}_candidates` list of {team, code, p} (top few by projected
+    probability). Resolved sides — and the whole group stage — are left untouched.
+    """
+    pending = [m for m in matches if m['stage'] == 'knockout'
+               and not (m['team1_resolved'] and m['team2_resolved'])]
+    if not pending:
+        return
+    cands = predict.slot_candidates(conn)
+    for m in pending:
+        c = cands.get(m['num'], {})
+        # Only attach a side that's undecided *and* has candidates to show; an
+        # empty list would just be payload noise (the client falls back to the
+        # raw slot placeholder for it anyway).
+        for side in ('team1', 'team2'):
+            if m[f'{side}_resolved']:
+                continue
+            coded = _with_codes(c.get(side, []))
+            if coded:
+                m[f'{side}_candidates'] = coded
+
+
+def _with_codes(cands):
+    """Attach a flag code to each {team, p} candidate for the client."""
+    return [{'team': c['team'], 'code': flag_code(c['team']), 'p': c['p']}
+            for c in cands]
+
+
 def _standings_by_group(conn):
     rows = conn.execute(
         "SELECT * FROM standings ORDER BY group_letter, rank"
@@ -335,6 +366,7 @@ def api_matches():
         rows = conn.execute(
             "SELECT * FROM matches ORDER BY utc_datetime").fetchall()
     out = [_match_dict(m, venues) for m in rows]
+    _attach_candidates(conn, out)
     conn.close()
     return jsonify(out)
 

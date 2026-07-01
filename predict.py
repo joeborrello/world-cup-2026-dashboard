@@ -528,6 +528,32 @@ def predictions(conn, sims=None, seed=None):
             "generated": agg["generated"], "teams": agg["teams"], "slots": slots}
 
 
+def slot_candidates(conn, top=3, sims=None, seed=None):
+    """Teams that MAY fill each side of every knockout match, with how often they
+    did across the Monte-Carlo sims.
+
+    Before a knockout fixture resolves, a view would otherwise show a bare slot
+    placeholder ("1E", "W74"). This surfaces the teams that could actually end up
+    playing there instead — the top `top` candidates per side by probability,
+    descending. Returns ``{num: {"team1": [{"team", "p"}, ...], "team2": [...]}}``,
+    where ``p`` is the marginal P(team occupies that slot). Reuses the same cached
+    aggregate as the projected bracket, so it costs a `Counter.most_common` per
+    slot once the sims are warm."""
+    sims = sims or SIMS
+    if seed is None:
+        seed = SEED                         # shared default -> deterministic odds
+    agg = _aggregate_cached(conn, sims, seed)
+    n = float(agg["sims"])
+    out = {}
+    for num, sides in agg["_slot_counts"].items():
+        out[num] = {
+            side: [{"team": t, "p": round(c / n, 3)}
+                   for t, c in sides[side].most_common(top)]
+            for side in ("team1", "team2")
+        }
+    return out
+
+
 def projected_bracket(conn, overrides=None, sims=None, seed=None):
     """Projected bracket honoring user `overrides` ({match_num: forced_winner}).
 
