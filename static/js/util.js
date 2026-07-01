@@ -76,6 +76,26 @@ window.WCTime = (function () {
   });
 })();
 
+/* Device-local tournament "day" with a 2am rollover — the single source of
+ * truth shared by the landing-page slate (today.js) and the daily map (map.js).
+ * A match kicking off between 00:00 and 01:59 local still belongs to the
+ * previous day's slate ("still tonight before bed"), so a timestamp is shifted
+ * back by 2h before taking its local calendar date. Both views key off this so
+ * they swap over at 2am local — instead of at midnight (the old today.js) or at
+ * UTC midnight (the old map.js, which flipped hours early for the Americas and
+ * pulled the daily map's live-weather overlays before the day's games were up). */
+window.WCDay = (function () {
+  const ROLLOVER_HOURS = 2;
+  const pad = n => String(n).padStart(2, '0');
+  // local calendar day (YYYY-MM-DD) that a Date belongs to, after the 2am shift
+  function key(d) {
+    const s = new Date(d.getTime() - ROLLOVER_HOURS * 3600 * 1000);
+    return `${s.getFullYear()}-${pad(s.getMonth() + 1)}-${pad(s.getDate())}`;
+  }
+  function today() { return key(new Date()); }
+  return { ROLLOVER_HOURS, key, today };
+})();
+
 // flag image (matches the server-side flags.flag() output) for JS-built markup
 window.wcFlag = function (code, name) {
   if (!code) return '';

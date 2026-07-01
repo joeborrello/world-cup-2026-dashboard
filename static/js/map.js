@@ -4,7 +4,12 @@
  * isobars/pressure (OpenWeatherMap, if a key is configured) and weather
  * advisories (NWS + Environment Canada). */
 (function () {
-  const TODAY = new Date().toISOString().slice(0, 10);
+  // "Today" for the live overlays and the default day rolls over at 2am local,
+  // matching the landing page's live scores (WCDay). The old `toISOString()`
+  // took the *UTC* date, which for viewers in the Americas flips to tomorrow in
+  // the early evening — pulling the live radar/isobar/advisory overlays and
+  // jumping the slider forward hours before that day's matches had even played.
+  const TODAY = WCDay.today();
 
   const map = L.map('map', { scrollWheelZoom: true }).setView([37.8, -96], 3.4);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
