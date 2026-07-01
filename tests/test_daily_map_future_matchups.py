@@ -134,6 +134,17 @@ def test_api_attaches_candidates_to_undecided_knockout(client, conn):
     assert saw_candidates
 
 
+def test_empty_candidate_lists_are_never_emitted(client, conn):
+    """A candidates key is attached only when there's something to preview — an
+    empty list would be payload noise (the client falls back to the raw slot)."""
+    _, d = _unresolved_ko(conn)
+    for m in client.get('/api/matches', query_string={'date': d}).get_json():
+        for side in ('team1', 'team2'):
+            key = f'{side}_candidates'
+            if key in m:
+                assert m[key], f"match {m['num']} {key} attached but empty"
+
+
 def test_group_stage_matches_have_no_candidates(client):
     """The group stage is always fully decided up front — no candidate lists."""
     d = '2026-06-11'  # tournament opening day (group stage)
