@@ -86,9 +86,11 @@ const count = prefix => [...mapLayers].filter(l => l.kind.startsWith(prefix)).le
 
 // ── fetch the scenario resolves by hand ─────────────────────────────────────
 const pending = {};
-global.fetch = url => new Promise(res => { (pending[url] = pending[url] || []).push(res); });
+global.fetch = url => new Promise((res, rej) => { (pending[url] = pending[url] || []).push({ res, rej }); });
 const land = (url, data) =>
-  (pending[url] || []).splice(0).forEach(res => res({ json: () => Promise.resolve(data) }));
+  (pending[url] || []).splice(0).forEach(p => p.res({ json: () => Promise.resolve(data) }));
+const fail = url =>
+  (pending[url] || []).splice(0).forEach(p => p.rej(new Error('network down')));
 const flush = () => new Promise(r => setImmediate(r));
 
 // ── page globals map.js expects ─────────────────────────────────────────────
@@ -131,6 +133,30 @@ const CATALOGUE = { host: 'https://rv.example', radar: { past: [{ path: '/latest
     step('both fetches landed, box ticked', 'advisories');
     cb.checked = false; cb.dispatch('change');
     step('unticked', 'advisories');
+  }
+
+  if (scenario === 'advis-hint') {
+    const cb = els.layAdvis, hint = byId('liveHint');
+    cb.checked = true; cb.dispatch('change');            // fetch in flight
+    out.push(['hint during fetch', hint.textContent]);
+    land('/alerts', ALERT); await flush(); await flush();
+    out.push(['hint after landing', hint.textContent]);
+    step('layers shown', 'advisories');
+    cb.checked = false; cb.dispatch('change');
+    out.push(['hint after untick', hint.textContent]);
+    step('layers after untick', 'advisories');
+  }
+
+  if (scenario === 'advis-fetch-fails') {
+    const cb = els.layAdvis, hint = byId('liveHint');
+    cb.checked = true; cb.dispatch('change');
+    fail('/alerts'); await flush(); await flush();
+    out.push(['hint after failure', hint.textContent]);
+    step('layers after failure', 'advisories');
+    cb.checked = false; cb.dispatch('change');
+    cb.checked = true; cb.dispatch('change');            // re-tick retries the fetch
+    land('/alerts', ALERT); await flush(); await flush();
+    step('layers after retry', 'advisories');
   }
 
   if (scenario === 'radar-untick-during-fetch') {
@@ -188,6 +214,30 @@ def test_advisories_competing_fetches_add_a_single_layer():
     steps = _run("advis-double-fetch")
     assert steps["both fetches landed, box ticked"] == 1
     assert steps["unticked"] == 0
+
+
+def test_advisories_tick_shows_progress_and_untick_restores_the_hint():
+    """The first alerts fetch takes seconds; a silent tick reads as broken.
+
+    Ticking must immediately say "Loading advisories…", the landed fetch must
+    replace it with the advisory count, and unticking must both remove the
+    layer and put the default live-layers hint back.
+    """
+    steps = _run("advis-hint")
+    assert steps["hint during fetch"] == "Loading advisories…"
+    assert "advisor" in steps["hint after landing"]
+    assert steps["layers shown"] == 1
+    assert steps["hint after untick"].startswith("(live")
+    assert steps["layers after untick"] == 0
+
+
+def test_advisories_fetch_failure_is_reported_and_a_retick_retries():
+    """A failed alerts fetch was silently swallowed — the other way a tick
+    could "do nothing". It must be reported, and a re-tick must retry."""
+    steps = _run("advis-fetch-fails")
+    assert "failed" in steps["hint after failure"]
+    assert steps["layers after failure"] == 0
+    assert steps["layers after retry"] == 1
 
 
 def test_radar_has_the_same_guard():
