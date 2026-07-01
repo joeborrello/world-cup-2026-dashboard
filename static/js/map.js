@@ -223,7 +223,10 @@
   cbRadar.addEventListener('change', () => {
     if (!cbRadar.checked) { if (radarLayer) map.removeLayer(radarLayer); radarLayer = null; return; }
     const add = () => {
-      if (!rvPath) return;
+      // The catalogue fetch is async: if the box was unticked while it was in
+      // flight (or a competing fetch already added the layer), adding now would
+      // orphan a layer that unchecking can never remove.
+      if (!rvPath || !cbRadar.checked || radarLayer) return;
       radarLayer = L.tileLayer(`${rvHost}${rvPath}/256/{z}/{x}/{y}/4/1_1.png`,
         { opacity: 0.6, zIndex: 300, attribution: 'Radar © RainViewer' }).addTo(map);
     };
@@ -260,6 +263,12 @@
   cbAdvis.addEventListener('change', () => {
     if (!cbAdvis.checked) { if (advisLayer) map.removeLayer(advisLayer); advisLayer = null; return; }
     const add = () => {
+      // The alerts fetch is slow (the server polls NWS + Environment Canada), so
+      // the box is often toggled again before it lands. Adding the layer while
+      // the box is unticked orphans it — nothing removes it, and the next tick
+      // stacks a second copy on top. Bail unless the box is still ticked and no
+      // competing fetch has already added the layer.
+      if (!cbAdvis.checked || advisLayer) return;
       advisLayer = L.geoJSON(advisData, {
         style: f => ({ color: f.properties.color, weight: 2, fillColor: f.properties.color, fillOpacity: 0.25 }),
         pointToLayer: (f, ll) => L.circleMarker(ll,
