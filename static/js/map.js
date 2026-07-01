@@ -270,11 +270,13 @@
     isoLegend.hidden = true;
   }
 
+  const liveHintText = () => window.WC.owmKey
+    ? '(live — today only)' : '(live — today only · temp map & isobars need an OWM key)';
+
   function updateLiveLayers(date) {
     if (date === TODAY) {
       panel.hidden = false;
-      hint.textContent = window.WC.owmKey
-        ? '(live — today only)' : '(live — today only · temp map & isobars need an OWM key)';
+      hint.textContent = liveHintText();
     } else {
       removeOverlays();
       panel.hidden = true;
@@ -322,7 +324,12 @@
   });
 
   cbAdvis.addEventListener('change', () => {
-    if (!cbAdvis.checked) { if (advisLayer) map.removeLayer(advisLayer); advisLayer = null; return; }
+    if (!cbAdvis.checked) {
+      if (advisLayer) map.removeLayer(advisLayer);
+      advisLayer = null;
+      hint.textContent = liveHintText();   // drop the advisory count / loading note
+      return;
+    }
     const add = () => {
       // The alerts fetch is slow (the server polls NWS + Environment Canada), so
       // the box is often toggled again before it lands. Adding the layer while
@@ -340,7 +347,15 @@
       hint.textContent = n ? `${n} active advisory${n > 1 ? 'ies' : ''} near venues` : 'No active advisories near venues';
     };
     if (advisData) return add();
-    fetch(window.WC.alertsUrl).then(r => r.json()).then(d => { advisData = d; add(); }).catch(() => {});
+    // The first fetch takes several seconds (the server polls NWS + Environment
+    // Canada before its cache warms). Say so — a silent tick reads as broken —
+    // and surface a failure instead of swallowing it, since a failed fetch is
+    // the other way a tick can "do nothing".
+    hint.textContent = 'Loading advisories…';
+    fetch(window.WC.alertsUrl).then(r => r.json()).then(d => { advisData = d; add(); })
+      .catch(() => {
+        if (cbAdvis.checked && !advisLayer) hint.textContent = 'Advisories failed to load — untick and re-tick to retry';
+      });
   });
 
   function advisPopup(p) {
