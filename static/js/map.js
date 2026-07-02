@@ -153,6 +153,7 @@
     const day = days[idx];
     if (!day) return;
     slider.value = idx;
+    todayBtn.disabled = idx === todayIndex();
     dayLabel.textContent = fmtDate(day.date) + ` · ${day.count} match${day.count > 1 ? 'es' : ''}`;
     panelDate.textContent = fmtDate(day.date);
     matchList.innerHTML = '<li class="loading">Loading…</li>';
@@ -367,10 +368,21 @@
   }
 
   // ── controls ────────────────────────────────────────────────────────────────
+  // Slider index for the device's current day: the day itself, else the next
+  // match day, else (tournament over) the last one. Recomputed on every call —
+  // NOT the load-time TODAY constant — because a tab left open across the 2am
+  // rollover should jump to the day it is *now*.
+  function todayIndex() {
+    const t = WCDay.today();
+    const i = days.findIndex(d => d.date >= t);
+    return i < 0 ? days.length - 1 : i;
+  }
   function go(delta) { idx = Math.max(0, Math.min(days.length - 1, idx + delta)); renderDay(); }
   document.getElementById('prevDay').addEventListener('click', () => go(-1));
   document.getElementById('nextDay').addEventListener('click', () => go(1));
   slider.addEventListener('input', () => { idx = +slider.value; renderDay(); });
+  const todayBtn = document.getElementById('todayBtn');
+  todayBtn.addEventListener('click', () => { idx = todayIndex(); renderDay(); });
 
   // ── boot ────────────────────────────────────────────────────────────────────
   Promise.all([
@@ -380,9 +392,7 @@
     vs.forEach(v => venues[v.ground] = v);
     days = ds;
     slider.max = Math.max(0, days.length - 1);
-    let start = days.findIndex(d => d.date >= TODAY);
-    if (start < 0) start = days.length - 1;
-    idx = start;
+    idx = todayIndex();
     renderDay();
   });
 })();

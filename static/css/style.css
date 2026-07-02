@@ -195,6 +195,10 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
 .day-controls button { font-size: 1.4rem; line-height: 1; width: 2.2rem; height: 2.2rem; border-radius: 50%;
   border: 1px solid var(--line); background: var(--card); cursor: pointer; color: var(--green-dark); box-shadow: var(--shadow); }
 .day-controls button:hover { background: var(--green); color: #fff; }
+.day-controls .today-btn { width: auto; border-radius: 1.1rem; padding: 0 .85rem; font-size: .78rem;
+  font-weight: 700; text-transform: uppercase; letter-spacing: .05em; }
+.day-controls .today-btn:disabled { opacity: .45; cursor: default; }
+.day-controls .today-btn:disabled:hover { background: var(--card); color: var(--green-dark); }
 .day-readout { flex: 1; }
 .day-readout input[type=range] { width: 100%; accent-color: var(--green); }
 .day-label { text-align: center; font-weight: 700; color: var(--green-dark); margin-top: .15rem; }
