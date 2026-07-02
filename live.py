@@ -1,9 +1,16 @@
 """Currently in-play matches, for the live ticker shown across the site.
 
-Pulls football-data.org and keeps only IN_PLAY / PAUSED fixtures, mapped to our
+Pulls football-data.org and keeps IN_PLAY / PAUSED fixtures, mapped to our
 matches by UTC kickoff (the same key the scheduled updater uses). Cached briefly
 in-process so football-data calls stay bounded no matter how many people are
 viewing.
+
+football-data can be slow to flip a fixture's status to IN_PLAY after the real
+kickoff (JOE-35: Spain–Austria still read TIMED 18+ minutes into the match), so
+a fixture whose scheduled kickoff has passed is *presumed* live until the feed
+catches up: shown in play at 0–0 with a kickoff-estimated minute, flagged
+``presumed`` so the frontend can say the score is unconfirmed. The presumption
+lapses after a regulation match's real duration.
 
 The minute of play is resolved *at the moment of each check* (JOE-17): we use
 football-data's own `minute` when the feed carries one, and otherwise estimate it
@@ -27,6 +34,14 @@ _CACHE = {"data": None, "ts": 0.0, "checked_at": None}
 # once we're past the break the elapsed clock runs ~15' ahead of the match clock.
 _HALF_MINUTES = 45
 _HALF_TIME_BREAK = 15
+
+# Feed statuses that mean "not started yet" — eligible for the kicked-off
+# presumption once the scheduled kickoff has passed. The presumption expires
+# after a full regulation match of real time (90' + break + stoppage): if the
+# feed still hasn't flipped by then, the match was likely postponed or the feed
+# is wrong in some other way, and a phantom 0–0 must not outlive the game.
+_NOT_STARTED_STATUSES = ("TIMED", "SCHEDULED")
+_PRESUMED_MAX_MINUTES = 2 * _HALF_MINUTES + _HALF_TIME_BREAK + 15
 
 
 def _utcnow():
@@ -57,6 +72,15 @@ def live_minute(fx, kickoff, now, state):
         return "45+'"
     minute = int(elapsed - _HALF_TIME_BREAK)           # second half, break removed
     return "90+'" if minute >= 90 else f"{minute}'"
+
+
+def presumed_live(kickoff, now):
+    """True when the scheduled kickoff has passed recently enough that the match
+    should be underway, even though the feed hasn't flipped it to IN_PLAY yet."""
+    if kickoff is None or now is None:
+        return False
+    elapsed = (now - kickoff).total_seconds() / 60.0
+    return 0 <= elapsed <= _PRESUMED_MAX_MINUTES
 
 
 def _parse_kickoff(utc):
@@ -93,10 +117,15 @@ def live_matches(conn):
     checked_at = _utcnow()
     out = []
     for fx in payload.get("matches", []):
-        if fx.get("status") not in ("IN_PLAY", "PAUSED"):
-            continue
+        status = fx.get("status")
         kickoff = _parse_kickoff(fx.get("utcDate"))
         if kickoff is None:
+            continue
+        if status in ("IN_PLAY", "PAUSED"):
+            presumed = False
+        elif status in _NOT_STARTED_STATUSES and presumed_live(kickoff, checked_at):
+            presumed = True
+        else:
             continue
         key = kickoff.isoformat()
         row = conn.execute(
@@ -105,7 +134,7 @@ def live_matches(conn):
         if row is None:
             continue
         ft = (fx.get("score") or {}).get("fullTime") or {}
-        state = "paused" if fx["status"] == "PAUSED" else "in_play"
+        state = "paused" if status == "PAUSED" else "in_play"
         out.append({
             "num": row["num"],
             "team1": row["team1"] or row["team1_slot"],
@@ -115,6 +144,7 @@ def live_matches(conn):
             "score1": ft.get("home") or 0,
             "score2": ft.get("away") or 0,
             "state": state,
+            "presumed": presumed,
             "minute": live_minute(fx, kickoff, checked_at, state),
             "utc_datetime": row["utc_datetime"],
             "tag": (f"Group {row['group_letter']}" if row["group_letter"] else row["round_label"]),

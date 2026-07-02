@@ -5,7 +5,11 @@
  * The minute of play is resolved server-side at the time of each check (JOE-17):
  * football-data's own minute when available, otherwise estimated from kickoff.
  * It is a snapshot — "as of the last check" — so we label it with the check time
- * rather than pretending to tick a live clock in the browser. PAUSED -> "HT". */
+ * rather than pretending to tick a live clock in the browser. PAUSED -> "HT".
+ *
+ * A match can arrive `presumed` (JOE-35): its kickoff has passed but the feed
+ * hasn't confirmed it in play yet, so the score is a 0-0 placeholder — tooltip
+ * the score so it isn't mistaken for a confirmed one. */
 (function () {
   const url = window.WC_LIVE;
   const ticker = document.getElementById('liveTicker');
@@ -45,8 +49,9 @@
     ticker.innerHTML = '<span class="lt-label"><span class="lt-dot"></span>LIVE</span>' +
       live.map(m => {
         const label = minuteLabel(m);
+        const scoreTitle = m.presumed ? ` title="Kicked off — score not yet confirmed by the feed"` : '';
         return `<span class="lt-match"><span class="lt-teams">` +
-          `${flag(m.team1_code, m.team1)}${m.team1} <b class="lt-score">${m.score1}–${m.score2}</b> ` +
+          `${flag(m.team1_code, m.team1)}${m.team1} <b class="lt-score"${scoreTitle}>${m.score1}–${m.score2}</b> ` +
           `${flag(m.team2_code, m.team2)}${m.team2}</span>` +
           (label ? `<span class="lt-min"${title ? ` title="${title}"` : ''}>${label}</span>` : '') +
           `<span class="lt-tag">${m.tag || ''}</span></span>`;
@@ -74,7 +79,9 @@
         const label = minuteLabel(m);
         const badge = document.createElement('span');
         badge.className = 'mc-live';
-        const title = checkedTitle();
+        const title = m.presumed
+          ? 'Kicked off — score not yet confirmed by the feed'
+          : checkedTitle();
         if (title) badge.title = title;
         badge.innerHTML = `<span class="lt-dot"></span>LIVE${label ? ' ' + label : ''}`;
         meta.appendChild(badge);
