@@ -18,10 +18,11 @@
   let live = [];
   let checkedAt = null;
 
-  // Minute-of-play label as of the most recent check. PAUSED already arrives as
-  // "HT" from the server; otherwise show whatever snapshot minute it resolved.
+  // Minute-of-play label as of the most recent check. PAUSED already arrives
+  // labelled from the server ("HT", or "ET break" at the extra-time interval);
+  // otherwise show whatever snapshot minute it resolved ("63'", "ET 105'", …).
   function minuteLabel(m) {
-    if (m.state === 'paused') return 'HT';
+    if (m.state === 'paused') return m.minute || 'HT';
     return m.minute || '';
   }
 
@@ -53,7 +54,7 @@
         return `<span class="lt-match"><span class="lt-teams">` +
           `${flag(m.team1_code, m.team1)}${m.team1} <b class="lt-score"${scoreTitle}>${m.score1}–${m.score2}</b> ` +
           `${flag(m.team2_code, m.team2)}${m.team2}</span>` +
-          (label ? `<span class="lt-min"${title ? ` title="${title}"` : ''}>${label}</span>` : '') +
+          (label ? `<span class="lt-min${m.extra_time ? ' et' : ''}"${title ? ` title="${title}"` : ''}>${label}</span>` : '') +
           `<span class="lt-tag">${m.tag || ''}</span></span>`;
       }).join('');
     updateCards();
@@ -78,7 +79,7 @@
       if (meta) {
         const label = minuteLabel(m);
         const badge = document.createElement('span');
-        badge.className = 'mc-live';
+        badge.className = 'mc-live' + (m.extra_time ? ' et' : '');
         const title = m.presumed
           ? 'Kicked off — score not yet confirmed by the feed'
           : checkedTitle();
