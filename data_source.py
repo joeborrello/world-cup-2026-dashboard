@@ -104,7 +104,13 @@ def normalize(raw):
             score1, score2, status = standing[0], standing[1], "finished"
         else:
             score1, score2, status = None, None, "scheduled"
-        pen1, pen2 = (pens[0], pens[1]) if (pens and len(pens) == 2) else (None, None)
+        # A shootout cannot end level: a level `p` (e.g. [0, 0]) is a mid-update
+        # placeholder, not a result. Storing it made the match look settled and
+        # blocked the football-data tie-break backfill (JOE-38) — treat as absent.
+        if pens and len(pens) == 2 and pens[0] != pens[1]:
+            pen1, pen2 = pens[0], pens[1]
+        else:
+            pen1, pen2 = None, None
 
         # For group matches the slots ARE the team names.
         team1_slot = mt["team1"]

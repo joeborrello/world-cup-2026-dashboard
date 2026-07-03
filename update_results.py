@@ -143,6 +143,12 @@ def _decide_football_data(sc, home, away, team1, team2, is_knockout):
     Germany-Paraguay as a 1-1 draw with no winner and the bracket couldn't
     advance the right side (JOE-16).
 
+    When ``duration`` is PENALTY_SHOOTOUT the feed's ``fullTime`` INCLUDES the
+    shootout goals (Australia-Egypt arrived as fullTime 3-5 on a match that
+    stood 1-1, JOE-38): the real match score is regularTime + extraTime, and
+    the fullTime surplus is the shootout itself — usable to name the winner
+    even while ``winner``/``penalties`` are still back-filling.
+
     Returns None — skip, don't corrupt — when teams can't be aligned, the result
     isn't a real result yet, or the feed's own ``winner`` contradicts the aligned
     score (a sign our name match is wrong).
@@ -150,7 +156,25 @@ def _decide_football_data(sc, home, away, team1, team2, is_knockout):
     ft = sc.get("fullTime") or {}
     if ft.get("home") is None or ft.get("away") is None:
         return None
-    scores = _aligned_scores(home, away, ft["home"], ft["away"], team1, team2)
+
+    m_home, m_away = ft["home"], ft["away"]
+    shoot = None                       # (home, away) shootout goals, if derivable
+    if sc.get("duration") == "PENALTY_SHOOTOUT":
+        rt, et = sc.get("regularTime") or {}, sc.get("extraTime") or {}
+        if None not in (rt.get("home"), rt.get("away"),
+                        et.get("home"), et.get("away")):
+            m_home = rt["home"] + et["home"]
+            m_away = rt["away"] + et["away"]
+            sh, sa = ft["home"] - m_home, ft["away"] - m_away
+            if sh >= 0 and sa >= 0 and sh != sa:
+                shoot = (sh, sa)
+        elif ft["home"] != ft["away"]:
+            # An unlevel fullTime on a shootout may be shootout-inflated, and
+            # without the regular/extra breakdown it can't be split into match
+            # score + shootout — skip rather than store a wrong scoreline.
+            return None
+
+    scores = _aligned_scores(home, away, m_home, m_away, team1, team2)
     if scores is None:
         return None
     s1, s2 = scores
@@ -164,13 +188,6 @@ def _decide_football_data(sc, home, away, team1, team2, is_knockout):
     elif win_home == "away":
         win_side = 3 - home_side if home_side else None
 
-    # A penalties breakdown (present on some plans) is preferred when it's there.
-    pen = sc.get("penalties") or {}
-    if pen.get("home") is not None and pen.get("away") is not None:
-        pens = _aligned_scores(home, away, pen["home"], pen["away"], team1, team2)
-        if pens:
-            return s1, s2, pens[0], pens[1]
-
     if s1 != s2:
         # Decisive on the pitch. If the feed names a winner, it must agree with
         # the score — disagreement means our home/away→team1/team2 match is wrong.
@@ -179,16 +196,30 @@ def _decide_football_data(sc, home, away, team1, team2, is_knockout):
             return None
         return s1, s2, None, None
 
-    # Level fullTime. For a knockout that means a shootout: encode the named
-    # winner as a minimal (1-0) penalty result so the bracket advances correctly
-    # even though football-data doesn't expose the actual shootout score. For a
-    # group match a level result is a genuine draw — no winner, no penalties.
+    # Level score. For a group match that's a genuine draw — no winner, no
+    # penalties. For a knockout it means a shootout: trust, in order,
+    #   1. an actual DECISIVE penalties breakdown — a level one (0-0, 4-4) is a
+    #      placeholder the feed publishes mid-backfill, not a result: a shootout
+    #      cannot end level. Trusting it verbatim stored Australia-Egypt as 1-1
+    #      pens 0-0, which stalled that whole side of the bracket (JOE-38);
+    #   2. the feed's named winner, encoded as a minimal 1-0 penalty result;
+    #   3. the shootout goals recovered from the fullTime surplus.
     if not is_knockout:
         return s1, s2, None, None
+    pen = sc.get("penalties") or {}
+    if (pen.get("home") is not None and pen.get("away") is not None
+            and pen["home"] != pen["away"]):
+        pens = _aligned_scores(home, away, pen["home"], pen["away"], team1, team2)
+        if pens:
+            return s1, s2, pens[0], pens[1]
     if win_side == 1:
         return s1, s2, 1, 0
     if win_side == 2:
         return s1, s2, 0, 1
+    if shoot:
+        pens = _aligned_scores(home, away, shoot[0], shoot[1], team1, team2)
+        if pens:
+            return s1, s2, pens[0], pens[1]
     return None  # level knockout with no winner named yet -> not actually settled
 
 
@@ -203,14 +234,20 @@ def _undecided_knockout(row):
     None and the bracket can't advance. We must keep consulting the OTHER data
     source (football-data, which names the shootout winner) to break that tie
     instead of treating the match as off-limits the instant openfootball finishes
-    it (JOE-16)."""
+    it (JOE-16).
+
+    "No shootout recorded" must mean "no DECISIVE shootout": a level penalty
+    placeholder (pens 0-0 from football-data's mid-backfill feed) is not a
+    result either, and requiring pen1/pen2 to be NULL made such a row look
+    settled — the updater stopped consulting football-data and the bracket
+    stalled permanently (Australia-Egypt, JOE-38). `winner_side` is the single
+    source of truth for "who advanced", so ask it."""
     return (
         row["stage"] == "knockout"
         and row["status"] == "finished"
         and row["score1"] is not None
-        and row["score1"] == row["score2"]
-        and row["pen1"] is None
-        and row["pen2"] is None
+        and compute.winner_side(
+            row["score1"], row["score2"], row["pen1"], row["pen2"]) is None
     )
 
 
@@ -278,8 +315,10 @@ def _update_from_football_data(conn):
         if backfill_pens:
             # Only break the tie — never rewrite openfootball's authoritative
             # scoreline. Require both feeds to agree the match is level and that
-            # football-data actually names a shootout winner, else leave it alone.
-            if (s1, s2) != (row["score1"], row["score2"]) or (pen1 is None and pen2 is None):
+            # football-data actually names a DECISIVE shootout winner (level
+            # pens are a placeholder, JOE-38), else leave it alone.
+            if ((s1, s2) != (row["score1"], row["score2"])
+                    or pen1 is None or pen2 is None or pen1 == pen2):
                 continue
             conn.execute(
                 "UPDATE matches SET pen1=?, pen2=? WHERE num=?",
