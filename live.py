@@ -35,6 +35,15 @@ _CACHE = {"data": None, "ts": 0.0, "checked_at": None}
 _HALF_MINUTES = 45
 _HALF_TIME_BREAK = 15
 
+# Extra time (JOE-37) — knockout matches only. The formal signal is the feed's
+# own minute running past 90 (ET is 91'–120'). The kickoff-elapsed *estimate*
+# can't observe stoppage, so it only presumes ET once the estimated match
+# minute clears regulation plus a generous stoppage-and-break allowance; before
+# that a "90+'" could still be second-half stoppage.
+_REGULATION_MINUTES = 2 * _HALF_MINUTES
+_ET_MAX_MINUTES = _REGULATION_MINUTES + 30
+_ET_PRESUME_MINUTE = _REGULATION_MINUTES + 10
+
 # Feed statuses that mean "not started yet" — eligible for the kicked-off
 # presumption once the scheduled kickoff has passed. The presumption expires
 # after a full regulation match of real time (90' + break + stoppage): if the
@@ -48,18 +57,52 @@ def _utcnow():
     return datetime.now(timezone.utc)
 
 
-def live_minute(fx, kickoff, now, state):
+def _feed_minute_int(fx):
+    """The feed's ``minute`` as an int, or None (absent or e.g. "45+2")."""
+    try:
+        return int(fx.get("minute"))
+    except (TypeError, ValueError):
+        return None
+
+
+def _past_regulation(fx, kickoff, now):
+    """True when the 90' of a knockout match must already be over — the feed's
+    own minute has reached 90, or enough real time has elapsed since kickoff
+    for two full halves plus the break."""
+    minute = _feed_minute_int(fx)
+    if minute is not None:
+        return minute >= _REGULATION_MINUTES
+    if kickoff is None or now is None:
+        return False
+    elapsed = (now - kickoff).total_seconds() / 60.0
+    return elapsed >= _REGULATION_MINUTES + _HALF_TIME_BREAK
+
+
+def live_minute(fx, kickoff, now, state, knockout=False):
     """Best-effort minute of play, as of ``now`` (the check time).
 
     Prefers football-data's own ``minute`` when the feed provides it; otherwise
     estimates from elapsed time since ``kickoff``. Returns a short display label
     ("63'", "45+'", "90+'") or "HT" at the break, or ``None`` when it can't be
     placed (no kickoff / clock not started yet).
+
+    ``knockout`` matches can go to extra time (JOE-37): a feed minute past 90
+    is formally ET ("ET 105'", capped "ET 120+'"); a PAUSED knockout past
+    regulation is the ET interval ("ET break"), not half-time; and the
+    kickoff-elapsed estimate degrades from "90+'" to a minute-less "ET" once
+    regulation plus stoppage must have run out.
     """
     if state == "paused":
+        if knockout and _past_regulation(fx, kickoff, now):
+            return "ET break"
         return "HT"
     api_min = fx.get("minute")
     if api_min not in (None, ""):
+        minute = _feed_minute_int(fx)
+        if knockout and minute is not None and minute > _REGULATION_MINUTES:
+            if minute >= _ET_MAX_MINUTES:
+                return f"ET {_ET_MAX_MINUTES}+'"
+            return f"ET {minute}'"
         return f"{api_min}'"
     if kickoff is None or now is None:
         return None
@@ -71,7 +114,11 @@ def live_minute(fx, kickoff, now, state):
     if elapsed < _HALF_MINUTES + _HALF_TIME_BREAK:     # stoppage / approaching break
         return "45+'"
     minute = int(elapsed - _HALF_TIME_BREAK)           # second half, break removed
-    return "90+'" if minute >= 90 else f"{minute}'"
+    if minute < _REGULATION_MINUTES:
+        return f"{minute}'"
+    if knockout and minute >= _ET_PRESUME_MINUTE:      # stoppage can't explain it
+        return "ET"
+    return "90+'"
 
 
 def presumed_live(kickoff, now):
@@ -135,6 +182,8 @@ def live_matches(conn):
             continue
         ft = (fx.get("score") or {}).get("fullTime") or {}
         state = "paused" if status == "PAUSED" else "in_play"
+        knockout = not row["group_letter"]             # only knockouts have ET
+        minute = live_minute(fx, kickoff, checked_at, state, knockout=knockout)
         out.append({
             "num": row["num"],
             "team1": row["team1"] or row["team1_slot"],
@@ -145,7 +194,8 @@ def live_matches(conn):
             "score2": ft.get("away") or 0,
             "state": state,
             "presumed": presumed,
-            "minute": live_minute(fx, kickoff, checked_at, state),
+            "minute": minute,
+            "extra_time": bool(minute) and minute.startswith("ET"),
             "utc_datetime": row["utc_datetime"],
             "tag": (f"Group {row['group_letter']}" if row["group_letter"] else row["round_label"]),
         })

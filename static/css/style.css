@@ -288,6 +288,8 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
 .match.live { box-shadow: 0 0 0 2px rgba(208,67,47,.25), var(--shadow); }
 .mc-live { display: inline-flex; align-items: center; gap: .3rem; font-weight: 800; color: #d0432f;
   font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; }
+/* extra time (JOE-37): amber instead of the regulation red */
+.lt-min.et, .mc-live.et { color: #b06000; }
 
 /* ── daily-map weather ─────────────────────────────────── */
 .fp-row .wx { font-size: 11px; font-weight: 700; color: var(--ink); white-space: nowrap; margin-left: 2px; }
