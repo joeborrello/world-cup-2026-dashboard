@@ -11,6 +11,11 @@ These tests pin down:
   * question-normalized caching — repeating a question never re-calls the LLM;
   * error delivery — a failed job reports once via the poll, then a re-ask retries;
   * tree normalization — clamped probabilities, capped width/depth, junk dropped;
+  * grounding — the prompt context carries today's date and every played result
+    (the tournament post-dates the LLM's training data, so an omitted result is
+    a result the map will deny — the Argentina–Cape Verde revision), and the
+    cache state-hash moves when a score is corrected, not only when a new match
+    finishes;
   * the page wiring (/what-if, nav link, JS hooks).
 
 Every LLM call is stubbed at pundits._claude_cli and jobs run in-line
@@ -283,6 +288,67 @@ def test_tree_is_clamped():
     assert scenarios._prob(-3) == 0.0
     assert scenarios._prob(150) == 1.0
     assert scenarios._prob(0.5) == 0.5
+
+
+# ── grounding in the current results (JOE-42 revision, 2026-07-04) ──────────
+def _mem_db(rows):
+    """In-memory DB with the real schema and the given matches rows."""
+    import sqlite3
+
+    import db as dbmod
+    conn = sqlite3.connect(":memory:")
+    conn.row_factory = sqlite3.Row
+    conn.executescript(dbmod.SCHEMA)
+    conn.executemany(
+        "INSERT INTO matches (num, stage, round_label, group_letter, date, "
+        "team1, team2, team1_slot, team2_slot, score1, score2, pen1, pen2, status) "
+        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)", rows)
+    return conn
+
+
+MATCH_ROWS = [
+    (86, 'knockout', 'Round of 32', None, '2026-07-03', 'Argentina', 'Cape Verde',
+     'W-A', 'W-B', 3, 2, None, None, 'finished'),
+    (87, 'knockout', 'Round of 32', None, '2026-07-03', 'Norway', 'Senegal',
+     'W-C', 'W-D', 1, 1, 4, 3, 'finished'),
+    (95, 'knockout', 'Round of 16', None, '2026-07-07', 'Argentina', 'Egypt',
+     'W86', 'W88', None, None, None, None, 'scheduled'),
+]
+
+
+def test_context_carries_played_results_and_todays_date(monkeypatch):
+    """The prompt must state which matches HAVE been played, with scores — the
+    tournament post-dates the LLM's training data, so a result left out of the
+    context is a result the map will claim never happened."""
+    conn = _mem_db(MATCH_ROWS)
+    monkeypatch.setattr(scenarios.compute, "compute_standings", lambda c: {})
+    ctx = scenarios._context(conn, {"teams": {}})
+    conn.close()
+
+    from datetime import datetime, timezone
+    assert f"TODAY'S DATE: {datetime.now(timezone.utc).strftime('%Y-%m-%d')}" in ctx
+    assert "RESULTS SO FAR" in ctx
+    assert "Argentina 3-2 Cape Verde" in ctx           # played → listed with score
+    assert "Norway 1-1 (4-3 pens) Senegal" in ctx      # shootouts shown too
+    assert "Argentina vs Egypt" in ctx                 # scheduled → still a fixture
+    # the played result appears as a result, not among the remaining fixtures
+    assert "Cape Verde" not in ctx.split("REMAINING FIXTURES")[1]
+
+
+def test_system_prompt_declares_results_ground_truth():
+    assert "ground truth" in scenarios.SYSTEM
+    assert "never claim a listed match was not played" in scenarios.SYSTEM
+
+
+def test_state_hash_moves_when_a_score_is_corrected():
+    """A corrected result must invalidate cached maps, not just a newly finished
+    match — the count of finished matches alone can't see a score fix."""
+    conn = _mem_db(MATCH_ROWS)
+    before = pundits._state_hash(conn, "whatif:test")
+    conn.execute("UPDATE matches SET score2=0 WHERE num=86")   # 3-2 → 3-0
+    after = pundits._state_hash(conn, "whatif:test")
+    conn.close()
+    assert before != after
 
 
 # ── page wiring ──────────────────────────────────────────────────────────────
