@@ -144,6 +144,22 @@ def budget_status(conn):
     }
 
 
+def limit_message(bs):
+    """If a fresh LLM call is blocked by the caps, say why; None when allowed.
+
+    Shared by the pundit panel and the what-if scenario mapper — both bill the
+    same daily/monthly budget, so one gate serves both.
+    """
+    if bs["day_used"] >= bs["day_cap"]:
+        return (f"Daily pundit cap reached ({bs['day_cap']} of {bs['day_max']} — "
+                f"{bs['reserve_pct']}% held in reserve). Resets at 00:00 UTC.")
+    if bs["month_spent"] >= bs["month_cap"]:
+        return (f"Monthly pundit cap reached (${bs['month_cap']:.2f} of "
+                f"${bs['month_budget']:.2f} — {bs['reserve_pct']}% reserved). "
+                f"${bs['month_spent']:.2f} used; resets next month.")
+    return None
+
+
 def _log_call(conn, scope, usage):
     pin, pout = PRICING.get(config.PUNDIT_MODEL, DEFAULT_PRICING)
     cost = usage.input_tokens / 1e6 * pin + usage.output_tokens / 1e6 * pout
@@ -226,15 +242,9 @@ def panel(conn, scope):
     # cost controls — gated by the reserved daily cap AND the reserved $ budget,
     # so the configured headroom (reserve_pct) is always left open.
     bs = budget_status(conn)
-    if bs["day_used"] >= bs["day_cap"]:
-        return {"available": False, "limited": True, "budget": bs,
-                "message": f"Daily pundit cap reached ({bs['day_cap']} of {bs['day_max']} — "
-                           f"{bs['reserve_pct']}% held in reserve). Resets at 00:00 UTC."}
-    if bs["month_spent"] >= bs["month_cap"]:
-        return {"available": False, "limited": True, "budget": bs,
-                "message": f"Monthly pundit cap reached (${bs['month_cap']:.2f} of "
-                           f"${bs['month_budget']:.2f} — {bs['reserve_pct']}% reserved). "
-                           f"${bs['month_spent']:.2f} used; resets next month."}
+    blocked = limit_message(bs)
+    if blocked:
+        return {"available": False, "limited": True, "budget": bs, "message": blocked}
 
     preds = predict.predictions(conn)
     context = _context(conn, preds, scope)

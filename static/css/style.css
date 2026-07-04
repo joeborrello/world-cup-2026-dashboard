@@ -571,6 +571,54 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
 .pundit-budget .pb.over { color: #b3261e; border-color: #f0c2bd; background: #fdeceb; font-weight: 700; }
 .pundit-na.limited { color: #b3261e; background: #fdeceb; border: 1px solid #f0c2bd; }
 
+/* ── what-if scenario mapper (MiroFish-style branch map) ── */
+.wi-ask textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--line);
+  border-radius: 10px; padding: .55rem .7rem; font: inherit; font-size: .92rem;
+  background: var(--card); resize: vertical; }
+.wi-ask-row { display: flex; gap: .6rem; align-items: center; margin: .4rem 0 .6rem; }
+.wi-examples { display: flex; flex-wrap: wrap; gap: .4rem; align-items: center; margin-bottom: 1rem; }
+.wi-chip { border: 1px solid var(--line); background: var(--bg); color: inherit;
+  border-radius: 999px; padding: .22rem .7rem; font-size: .78rem; cursor: pointer; }
+.wi-chip:hover { border-color: #a06bd0; color: #7a49a8; }
+.wi-out { min-height: 1rem; }
+.wi-reading { font-size: .9rem; }
+
+/* The map itself: a top-down tree drawn with flex rows + border connectors.
+ * Wide answers scroll horizontally rather than squashing the node cards. */
+.wi-map { overflow-x: auto; padding-bottom: .5rem; }
+.wi-tree, .wi-tree ul { display: flex; justify-content: center; list-style: none;
+  margin: 0; padding: 0; position: relative; }
+.wi-tree ul { padding-top: 18px; }
+.wi-tree li { display: flex; flex-direction: column; align-items: center;
+  position: relative; padding: 18px 5px 0; }
+.wi-tree > li { padding-top: 0; }
+/* connector from a node up to its parent */
+.wi-tree li::before, .wi-tree li::after { content: ''; position: absolute; top: 0;
+  right: 50%; width: 50%; height: 18px; border-top: 2px solid var(--line); }
+.wi-tree li::after { right: auto; left: 50%; border-left: 2px solid var(--line); }
+.wi-tree li:only-child::before, .wi-tree li:only-child::after { display: none; }
+.wi-tree li:only-child { padding-top: 0; }
+.wi-tree li:first-child::before, .wi-tree li:last-child::after { border-top: none; }
+.wi-tree li:last-child::before { border-right: 2px solid var(--line); border-radius: 0 8px 0 0; }
+.wi-tree li:first-child::after { border-radius: 8px 0 0 0; }
+.wi-tree > li::before, .wi-tree > li::after { display: none; }
+/* stem from a parent down to its children row */
+.wi-tree ul::before { content: ''; position: absolute; top: 0; left: 50%;
+  width: 0; height: 18px; border-left: 2px solid var(--line); }
+
+.wi-node { width: 220px; background: var(--card); border: 1px solid var(--line);
+  border-top: 3px solid #a06bd0; border-radius: 9px; padding: .5rem .65rem;
+  box-shadow: var(--shadow); text-align: left; }
+.wi-node.wi-root { width: 300px; border-top-color: var(--green); }
+.wi-node-head { font-weight: 700; font-size: .84rem; line-height: 1.3; }
+.wi-node-sum { font-size: .78rem; line-height: 1.4; margin-top: .3rem; }
+.wi-node-impact { font-size: .7rem; color: var(--green-dark); font-weight: 600; margin-top: .3rem; }
+.wi-prob { display: flex; align-items: center; gap: .35rem; margin-top: .3rem; }
+.wi-prob .wi-bar { flex: 1; max-width: 120px; height: 6px; background: var(--bg);
+  border-radius: 3px; overflow: hidden; }
+.wi-prob .wi-bar i { display: block; height: 100%; background: #a06bd0; }
+.wi-prob b { font-size: .74rem; font-variant-numeric: tabular-nums; }
+
 /* ── methodology modal ───────────────────────────────── */
 .meth-btn {
   display: inline-flex; align-items: center; gap: .35rem;
