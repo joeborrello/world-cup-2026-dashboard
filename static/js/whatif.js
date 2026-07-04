@@ -55,11 +55,58 @@
       (d.bottom_line ? `<div class="pconsensus"><b>Bottom line:</b> ${esc(d.bottom_line)}</div>` : '');
   }
 
+  // Generation is asynchronous: the POST returns a pending envelope right away
+  // (the LLM call can take minutes — longer than the proxy allows a request to
+  // hang), and we poll the status endpoint until the map is ready.
+  const POLL_MS = 4000, POLL_MAX_MS = 6 * 60 * 1000;
+  let pollTimer = null;
+
+  function showWait(elapsedS) {
+    const t = elapsedS ? ` · ${elapsedS}s` : '';
+    out.innerHTML = `<p class="subtle pundit-wait">Mapping the branches… ` +
+      `a fresh map takes a minute or two${t}</p>`;
+  }
+
+  function finish(d) {
+    if (d.budget) renderBudget(Object.assign({ enabled: true }, d.budget));
+    if (!d.available) {
+      const cls = d.limited ? 'pundit-na limited' : 'pundit-na';
+      out.innerHTML = `<p class="${cls}">${esc(d.message || 'Scenario mapper unavailable.')}</p>`;
+    } else {
+      renderMap(d);
+    }
+    goBtn.disabled = false;
+  }
+
+  function poll(question, startedAt) {
+    if (Date.now() - startedAt > POLL_MAX_MS) {
+      out.innerHTML = '<p class="pundit-na">Still mapping after several minutes — ' +
+        'the map keeps building in the background, so ask the same question ' +
+        'again shortly and it will be waiting (repeats are free).</p>';
+      goBtn.disabled = false;
+      return;
+    }
+    fetch(window.WC.statusUrl + '?question=' + encodeURIComponent(question))
+      .then(r => r.json())
+      .then(d => {
+        if (d.pending) {
+          showWait(Math.round((Date.now() - startedAt) / 1000));
+          pollTimer = setTimeout(() => poll(question, startedAt), POLL_MS);
+        } else {
+          finish(d);
+        }
+      })
+      .catch(() => { // transient blip (tab sleep, flaky mobile) — keep polling
+        pollTimer = setTimeout(() => poll(question, startedAt), POLL_MS);
+      });
+  }
+
   function ask() {
     const question = qEl.value.trim();
     if (!question) { qEl.focus(); return; }
+    clearTimeout(pollTimer);
     goBtn.disabled = true;
-    out.innerHTML = '<p class="subtle pundit-wait">Mapping the branches…</p>';
+    showWait(0);
     fetch(window.WC.askUrl, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -67,16 +114,17 @@
     })
       .then(r => r.json())
       .then(d => {
-        if (d.budget) renderBudget(Object.assign({ enabled: true }, d.budget));
-        if (!d.available) {
-          const cls = d.limited ? 'pundit-na limited' : 'pundit-na';
-          out.innerHTML = `<p class="${cls}">${esc(d.message || 'Scenario mapper unavailable.')}</p>`;
-          return;
+        if (d.available && d.pending) {
+          if (d.budget) renderBudget(Object.assign({ enabled: true }, d.budget));
+          pollTimer = setTimeout(() => poll(question, Date.now()), POLL_MS);
+        } else {
+          finish(d);
         }
-        renderMap(d);
       })
-      .catch(() => { out.innerHTML = '<p class="pundit-na">Could not reach the scenario mapper.</p>'; })
-      .finally(() => { goBtn.disabled = false; });
+      .catch(() => {
+        out.innerHTML = '<p class="pundit-na">Could not reach the scenario mapper.</p>';
+        goBtn.disabled = false;
+      });
   }
 
   goBtn.addEventListener('click', ask);

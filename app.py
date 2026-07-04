@@ -573,10 +573,23 @@ def api_pundits_budget():
 
 @app.route('/api/scenarios', methods=['POST'])
 def api_scenarios():
-    """MiroFish-style free-form what-if: question in, mapped scenario tree out."""
+    """MiroFish-style free-form what-if: question in, cached map or a pending
+    envelope out. Generation runs in the background — a claude CLI call can
+    outlive the reverse proxy's read timeout, so the answer is never awaited
+    in-request; the page polls /api/scenarios/status instead."""
     body = request.get_json(silent=True) or {}
     conn = db.connect()
     data = scenarios.ask(conn, body.get('question', ''))
+    conn.close()
+    status = 400 if data.get('error') == 'bad_question' else 200
+    return jsonify(data), status
+
+
+@app.route('/api/scenarios/status')
+def api_scenarios_status():
+    """Poll for the answer to a question already POSTed to /api/scenarios."""
+    conn = db.connect()
+    data = scenarios.poll(conn, request.args.get('question', ''))
     conn.close()
     status = 400 if data.get('error') == 'bad_question' else 200
     return jsonify(data), status
