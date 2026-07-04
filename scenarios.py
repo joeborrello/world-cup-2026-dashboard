@@ -52,8 +52,11 @@ MAX_BRANCHES, MAX_CHILDREN, MAX_DEPTH = 6, 4, 2
 
 SYSTEM = (
     "You are a football scenario analyst mapping out 2026 World Cup what-if "
-    "questions on a whiteboard. You are given the current standings, remaining "
-    "fixtures, and a statistical model's odds (Elo + Monte-Carlo). The user asks "
+    "questions on a whiteboard. You are given today's date, the results of every "
+    "match already played, the current standings, remaining fixtures, and a "
+    "statistical model's odds (Elo + Monte-Carlo). The tournament is underway and "
+    "post-dates your training data: the supplied results are ground truth — never "
+    "contradict them, and never claim a listed match was not played. The user asks "
     "a free-form question about a potential scenario or alternative outcome. "
     "Map the plausible branches: 3-5 top-level scenarios, each optionally with "
     "up to 3 child scenarios exploring knock-on consequences (max 2 levels of "
@@ -84,8 +87,17 @@ def _scope(question):
 
 def _context(conn, preds):
     """The model's current view of the tournament, compact enough for one prompt:
-    title odds, every group table with advance odds, and the remaining fixtures."""
-    lines = ["TITLE RACE — model odds (top contenders):"]
+    today's date, title odds, every group table with advance odds, every result
+    so far, and the remaining fixtures.
+
+    The played results matter as much as the odds: the tournament post-dates the
+    LLM's training data, so a result it isn't handed is a result it will deny
+    (the Argentina–Cape Verde revision on JOE-42 — the map claimed a match played
+    the day before had never happened)."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    lines = [f"TODAY'S DATE: {today} (UTC)",
+             "",
+             "TITLE RACE — model odds (top contenders):"]
     top = sorted(preds["teams"].items(), key=lambda kv: -kv[1]["champion"])[:12]
     for t, v in top:
         lines.append(f"- {t}: champion {v['champion']*100:.1f}%, "
@@ -100,6 +112,21 @@ def _context(conn, preds):
                          f"GD{r['gd']:+d}, Elo {v.get('elo')}; "
                          f"P(win group) {v.get('p_first', 0)*100:.0f}%, "
                          f"P(advance) {v.get('advance', 0)*100:.0f}%")
+
+    played = conn.execute(
+        "SELECT num, stage, round_label, group_letter, date, team1, team2, "
+        "score1, score2, pen1, pen2 FROM matches WHERE status = 'finished' "
+        "ORDER BY num").fetchall()
+    if played:
+        lines.append("\nRESULTS SO FAR — every match already played (ground truth):")
+        for m in played:
+            score = f"{m['score1']}-{m['score2']}"
+            if m["pen1"] is not None and m["pen2"] is not None:
+                score += f" ({m['pen1']}-{m['pen2']} pens)"
+            where = f"Group {m['group_letter']}" if m["stage"] == "group" \
+                else m["round_label"]
+            lines.append(f"- #{m['num']} {m['date']}: {m['team1']} {score} "
+                         f"{m['team2']} ({where})")
 
     fx = conn.execute(
         "SELECT num, stage, round_label, group_letter, date, team1, team2, "

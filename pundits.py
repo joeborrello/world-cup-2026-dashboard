@@ -172,8 +172,16 @@ def _log_call(conn, scope, usage):
 
 
 def _state_hash(conn, scope):
-    n = conn.execute("SELECT COUNT(*) FROM matches WHERE status='finished'").fetchone()[0]
-    raw = f"{scope}|{n}|{config.PUNDIT_MODEL}"
+    """Cache key half that tracks the results state. Hashes every finished
+    result (not just a count) so a corrected score or shootout also invalidates
+    cached pundit takes and what-if maps — stale answers about "the most recent
+    data" are worse than a re-generation."""
+    rows = conn.execute(
+        "SELECT num, score1, score2, pen1, pen2 FROM matches "
+        "WHERE status='finished' ORDER BY num").fetchall()
+    state = ";".join(f"{r['num']}:{r['score1']}-{r['score2']}"
+                     f"/{r['pen1']}-{r['pen2']}" for r in rows)
+    raw = f"{scope}|{state}|{config.PUNDIT_MODEL}"
     return hashlib.sha1(raw.encode()).hexdigest()[:16]
 
 
@@ -187,11 +195,15 @@ def _group_context(conn, preds, letter):
             f"GD{r['gd']:+d}; model P(win group) {v.get('p_first',0)*100:.0f}%, "
             f"P(advance) {v.get('advance',0)*100:.0f}%")
     fx = conn.execute(
-        "SELECT team1, team2, status, date FROM matches "
+        "SELECT team1, team2, score1, score2, status, date FROM matches "
         "WHERE group_letter=? ORDER BY num", (letter,)).fetchall()
+    played = [f"{m['team1']} {m['score1']}-{m['score2']} {m['team2']} ({m['date']})"
+              for m in fx if m["status"] == "finished"]
     remaining = [f"{m['team1']} vs {m['team2']} ({m['date']})"
                  for m in fx if m["status"] != "finished"]
     body = (f"GROUP {letter} — current table and model odds:\n" + "\n".join(lines))
+    if played:
+        body += "\n\nResults so far (ground truth):\n- " + "\n- ".join(played)
     if remaining:
         body += "\n\nRemaining group fixtures:\n- " + "\n- ".join(remaining)
     else:
