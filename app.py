@@ -23,6 +23,7 @@ import live
 import predict
 import publish_pages
 import pundits
+import scenarios
 import weather
 from flags import flag, flag_code
 
@@ -568,6 +569,22 @@ def api_pundits_budget():
     conn.close()
     bs['enabled'] = pundits.available()
     return jsonify(bs)
+
+
+@app.route('/api/scenarios', methods=['POST'])
+def api_scenarios():
+    """MiroFish-style free-form what-if: question in, mapped scenario tree out."""
+    body = request.get_json(silent=True) or {}
+    conn = db.connect()
+    data = scenarios.ask(conn, body.get('question', ''))
+    conn.close()
+    status = 400 if data.get('error') == 'bad_question' else 200
+    return jsonify(data), status
+
+
+@app.route('/what-if')
+def what_if_page():
+    return render_template('whatif.html')
 
 
 @app.route('/predictions')

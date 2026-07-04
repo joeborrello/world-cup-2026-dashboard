@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}What if? · World Cup 2026{% endblock %}
+{% block og_title %}What if? — World Cup 2026 scenario mapper{% endblock %}
+{% block og_description %}Ask free-form what-if questions about the 2026 World Cup and get a mapped tree of scenarios — AI-drawn branches grounded in an Elo + Monte-Carlo prediction model.{% endblock %}
+
+{% block content %}
+<section class="hero">
+  <h1>What if?</h1>
+  <p class="subtle">A <a href="https://github.com/666ghj/MiroFish" target="_blank" rel="noopener">MiroFish</a>-style
+    scenario mapper: ask a free-form question about a potential scenario or alternative
+    outcome, and the AI maps the plausible branches — grounded in the same
+    <a href="{{ url_for('predictions_page') }}">Elo + Monte-Carlo model</a> that powers the predictions page.</p>
+</section>
+
+<div class="wi-ask">
+  <textarea id="wiQuestion" maxlength="300" rows="2"
+            placeholder="e.g. What happens to Group C if Argentina lose their last group match?"></textarea>
+  <div class="wi-ask-row">
+    <button type="button" id="wiGo" class="tm-btn">Map the scenarios</button>
+    <span class="pundit-budget" id="wiBudget"></span>
+  </div>
+</div>
+
+<div class="wi-examples" id="wiExamples">
+  <span class="subtle">Try:</span>
+  <button type="button" class="wi-chip">What if Brazil lose in the Round of 32?</button>
+  <button type="button" class="wi-chip">Who benefits most if the top seed in Group A gets upset?</button>
+  <button type="button" class="wi-chip">What does the final look like if both semi-final favourites fall?</button>
+</div>
+
+<div id="wiOut" class="wi-out"></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.WC = {
+    askUrl: "{{ url_for('api_scenarios') }}",
+    budgetUrl: "{{ url_for('api_pundits_budget') }}"
+  };
+</script>
+<script src="{{ url_for('static', filename='js/whatif.js') }}"></script>
+{% endblock %}
