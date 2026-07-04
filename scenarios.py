@@ -12,19 +12,39 @@ Max subscription (never the API), the same `pundit_cache`/`pundit_calls` tables,
 and the same daily/monthly budget, so one set of cost controls governs all LLM
 use. Answers are cached by (normalized question, results-state hash): repeating
 a question is free until new results land.
+
+Generation is asynchronous: a scenario-tree CLI call can run for minutes, far
+past the reverse proxy's 60s read timeout, so answering the POST in-line meant
+nginx 504'd the browser while Flask kept working (the "couldn't be reached"
+failure). Instead `ask()` starts a background job and returns a pending
+envelope immediately; the page polls `poll()` until the map lands in the cache.
 """
 
 import hashlib
 import json
 import re
+import threading
 from datetime import datetime, timezone
 
 import compute
+import db
 import predict
 import pundits
 
 # Question sanity bounds — a couple of words up to a short paragraph.
 MIN_QUESTION, MAX_QUESTION = 8, 300
+
+# Generation jobs, keyed by question scope. "running" while the CLI call is
+# out, then "done" (payload also written to pundit_cache) or "error"; poll()
+# pops finished entries as it delivers them. The Flask dev server is threaded,
+# so every access goes through _jobs_lock.
+_jobs = {}
+_jobs_lock = threading.Lock()
+
+
+def _spawn(fn, *args):
+    """Run fn on a daemon thread (tests patch this to run in-line)."""
+    threading.Thread(target=fn, args=args, daemon=True).start()
 
 # Tree shape caps: whatever the model returns is clipped to at most this many
 # top-level branches / children per node / levels below the root question.
@@ -150,18 +170,72 @@ def _normalize_tree(data, raw_text):
     }
 
 
-def ask(conn, question):
-    """Answer a free-form what-if question with a scenario map, cached.
+def _validate(question):
+    """(normalized question, None) or (None, error envelope)."""
+    q = normalize_question(question)
+    if len(q) < MIN_QUESTION or len(q) > MAX_QUESTION:
+        return None, {"available": False, "error": "bad_question",
+                      "message": f"Ask a question between {MIN_QUESTION} and "
+                                 f"{MAX_QUESTION} characters."}
+    return q, None
 
-    Returns a dict the API returns verbatim: either an error/limit envelope or
+
+def _cache_row(conn, scope, sh):
+    return conn.execute(
+        "SELECT payload FROM pundit_cache WHERE scope=? AND state_hash=?",
+        (scope, sh)).fetchone()
+
+
+def _answer(conn, q, payload, cached):
+    return {"available": True, "cached": cached, "question": q,
+            "budget": pundits.budget_status(conn), **payload}
+
+
+def _generate(q, scope, sh):
+    """Background job body: one CLI call → normalized tree → cache + job entry.
+
+    Runs off-request on its own DB connection; the billing row is written the
+    moment the CLI call succeeds, exactly as the synchronous version did.
+    """
+    conn = db.connect()
+    try:
+        preds = predict.predictions(conn)
+        context = _context(conn, preds)
+        text, usage = pundits._claude_cli(SYSTEM, f"Question: {q}\n\n{context}")
+        pundits._log_call(conn, scope, usage)
+        if text.startswith("```"):
+            text = text.strip("`").split("\n", 1)[-1].rsplit("```", 1)[0]
+        try:
+            data = _normalize_tree(json.loads(text), text)
+        except json.JSONDecodeError:
+            data = _normalize_tree(None, text)
+        conn.execute(
+            "INSERT OR REPLACE INTO pundit_cache "
+            "(scope, state_hash, payload, created_at) VALUES (?,?,?,?)",
+            (scope, sh, json.dumps(data), datetime.now(timezone.utc).isoformat()))
+        conn.commit()
+        with _jobs_lock:
+            _jobs[scope] = {"status": "done", "data": data}
+    except Exception as exc:
+        with _jobs_lock:
+            _jobs[scope] = {"status": "error",
+                            "message": f"Scenario mapper error: {exc}"}
+    finally:
+        conn.close()
+
+
+def ask(conn, question):
+    """Handle a POST: the cached map instantly, or start background generation.
+
+    Returns a dict the API returns verbatim — an error/limit envelope,
+    {"available": True, "pending": True, ...} when a job is running (the page
+    then polls /api/scenarios/status), or the full map
     {"available": True, "cached": ..., "question": ..., "budget": ...,
      "reading": ..., "scenarios": [tree...], "bottom_line": ...}.
     """
-    q = normalize_question(question)
-    if len(q) < MIN_QUESTION or len(q) > MAX_QUESTION:
-        return {"available": False, "error": "bad_question",
-                "message": f"Ask a question between {MIN_QUESTION} and "
-                           f"{MAX_QUESTION} characters."}
+    q, bad = _validate(question)
+    if bad:
+        return bad
     if not pundits.available():
         return {"available": False,
                 "message": "The claude CLI is not on the server — "
@@ -170,39 +244,59 @@ def ask(conn, question):
     pundits._ensure_cache(conn)
     scope = _scope(q)
     sh = pundits._state_hash(conn, scope)
-    row = conn.execute(
-        "SELECT payload FROM pundit_cache WHERE scope=? AND state_hash=?",
-        (scope, sh)).fetchone()
+    row = _cache_row(conn, scope, sh)
     if row:  # cache hits are free — never blocked by the budget
-        return {"available": True, "cached": True, "question": q,
-                "budget": pundits.budget_status(conn), **json.loads(row["payload"])}
+        with _jobs_lock:
+            _jobs.pop(scope, None)
+        return _answer(conn, q, json.loads(row["payload"]), cached=True)
 
     bs = pundits.budget_status(conn)
-    blocked = pundits.limit_message(bs)
-    if blocked:
-        return {"available": False, "limited": True, "budget": bs,
-                "message": blocked}
+    with _jobs_lock:
+        job = _jobs.get(scope)
+        if job and job["status"] == "running":
+            return {"available": True, "pending": True, "question": q,
+                    "budget": bs}
+        # a leftover done/error entry means the user is asking again — retry
+        _jobs.pop(scope, None)
+        blocked = pundits.limit_message(bs)
+        if blocked:
+            return {"available": False, "limited": True, "budget": bs,
+                    "message": blocked}
+        _jobs[scope] = {"status": "running"}
+    _spawn(_generate, q, scope, sh)
+    return {"available": True, "pending": True, "question": q, "budget": bs}
 
-    preds = predict.predictions(conn)
-    context = _context(conn, preds)
 
-    try:
-        text, usage = pundits._claude_cli(
-            SYSTEM, f"Question: {q}\n\n{context}")
-        pundits._log_call(conn, scope, usage)  # bill it the moment the call succeeds
-        if text.startswith("```"):
-            text = text.strip("`").split("\n", 1)[-1].rsplit("```", 1)[0]
-        try:
-            data = _normalize_tree(json.loads(text), text)
-        except json.JSONDecodeError:
-            data = _normalize_tree(None, text)
-    except Exception as exc:
-        return {"available": False, "message": f"Scenario mapper error: {exc}"}
+def poll(conn, question):
+    """Handle a status poll for a previously POSTed question.
 
-    conn.execute(
-        "INSERT OR REPLACE INTO pundit_cache (scope, state_hash, payload, created_at) "
-        "VALUES (?,?,?,?)",
-        (scope, sh, json.dumps(data), datetime.now(timezone.utc).isoformat()))
-    conn.commit()
-    return {"available": True, "cached": False, "question": q,
-            "budget": pundits.budget_status(conn), **data}
+    Returns the finished map, a pending envelope while the job runs, an error
+    envelope (delivered once — the failed job is cleared so a re-ask retries),
+    or a "not being mapped" nudge when there is nothing in flight.
+    """
+    q, bad = _validate(question)
+    if bad:
+        return bad
+
+    pundits._ensure_cache(conn)
+    scope = _scope(q)
+    sh = pundits._state_hash(conn, scope)
+    row = _cache_row(conn, scope, sh)
+    with _jobs_lock:
+        job = _jobs.get(scope)
+        if row or (job and job["status"] != "running"):
+            _jobs.pop(scope, None)
+    if row:
+        fresh = bool(job) and job["status"] == "done"
+        return _answer(conn, q, json.loads(row["payload"]), cached=not fresh)
+    if job and job["status"] == "done":
+        # results moved on mid-generation (new final score → new state hash);
+        # the stashed payload still answers the question that was asked
+        return _answer(conn, q, job["data"], cached=False)
+    if job and job["status"] == "error":
+        return {"available": False, "message": job["message"]}
+    if job:
+        return {"available": True, "pending": True, "question": q}
+    return {"available": False,
+            "message": "That question isn't being mapped right now — "
+                       "ask it again to start a fresh map."}
