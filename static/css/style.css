@@ -588,6 +588,11 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
 .wi-map { overflow-x: auto; padding-bottom: .5rem; }
 .wi-tree, .wi-tree ul { display: flex; justify-content: center; list-style: none;
   margin: 0; padding: 0; position: relative; }
+/* Size the tree to its content: a centered flex row wider than the scrollport
+ * overflows both sides, and the left half can't be scrolled to. With
+ * width:max-content the overflow all lands on the (scrollable) right, while
+ * min-width keeps narrow trees centered. */
+.wi-tree { width: max-content; min-width: 100%; box-sizing: border-box; }
 .wi-tree ul { padding-top: 18px; }
 .wi-tree li { display: flex; flex-direction: column; align-items: center;
   position: relative; padding: 18px 5px 0; }
