@@ -163,6 +163,34 @@ def round_of(num):
     return None
 
 
+def _eliminated_teams(group_fixtures, ko, team_group):
+    """Teams that can no longer win the title, judged ONLY from decisively
+    finished results — never from Monte-Carlo sampling (a live longshot whose
+    odds round to zero must not be branded eliminated).
+
+    Two ways out of title contention:
+      1. Losing any decisively finished knockout match (a shootout counts; a
+         level match with no penalties recorded yet decides nothing — see
+         _finished_decision). The semifinal losers meet again in the third-place
+         match, but both are already out of the *title* race by then.
+      2. Missing the Round of 32: once every group match is finished AND the
+         feed has resolved every R32 pairing to real team names, everyone not
+         in that 32-team field is out. Until both hold (best-third assignment
+         can lag the last whistle), nobody is eliminated on group results.
+    """
+    out = set()
+    for m in ko:
+        decided = _finished_decision(m)
+        if decided:
+            out.add(decided[1])
+    if group_fixtures and all(gm["status"] == "finished" for gm in group_fixtures):
+        r32 = [m for m in ko if round_of(m["num"]) == "r32"]
+        if r32 and all(m["team1"] and m["team2"] for m in r32):
+            field = {m[side] for m in r32 for side in ("team1", "team2")}
+            out |= set(team_group) - field
+    return out & set(team_group)
+
+
 def _assign_thirds(third_slots, qualified_groups, team_of_group):
     """Backtracking match of qualifying groups onto '3X/Y' slots (most-constrained
     first), mirroring compute.assign_third_place_slots but pure in-memory."""
@@ -328,6 +356,8 @@ def _aggregate(conn, sims):
         if champ:
             reach[champ]["champion"] += 1
 
+    eliminated = _eliminated_teams(group_fixtures, ko, team_group)
+
     n = float(sims)
     teams_out = {}
     for t, g in team_group.items():
@@ -338,6 +368,7 @@ def _aggregate(conn, sims):
             "p_first": rc[1] / n, "p_second": rc[2] / n, "p_third": rc[3] / n,
             "advance": rr["r32"] / n, "r16": rr["r16"] / n, "qf": rr["qf"] / n,
             "sf": rr["sf"] / n, "final": rr["final"] / n, "champion": rr["champion"] / n,
+            "eliminated": t in eliminated,
         }
 
     group_teams = {}
