@@ -537,6 +537,15 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
 .odds-table .ot-win { position: relative; font-weight: 800; min-width: 90px; }
 .odds-table .ot-bar { position: absolute; left: 0; top: 0; bottom: 0; background: rgba(11,110,79,.16); z-index: 0; }
 .odds-table .ot-val { position: relative; z-index: 1; }
+/* teams out of title contention: dimmed row, name struck through (JOE-43) */
+.odds-table tr.ot-out td { color: var(--muted); }
+.odds-table tr.ot-out .ot-team { font-weight: 500; }
+.odds-table tr.ot-out .ot-name { text-decoration: line-through; }
+.odds-table tr.ot-out .flag-img { filter: grayscale(1); opacity: .6; }
+.odds-table tr.ot-out .ot-bar { background: rgba(120,120,120,.12); }
+.ot-elim { font-size: .6rem; font-weight: 700; text-transform: uppercase; letter-spacing: .05em;
+  color: var(--muted); border: 1px solid var(--line); border-radius: 4px; padding: 0 .28em;
+  vertical-align: 1px; }
 
 .group-odds { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: .8rem; margin: .6rem 0 1.5rem; }
 .gcard { background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: .6rem .7rem; box-shadow: var(--shadow); }

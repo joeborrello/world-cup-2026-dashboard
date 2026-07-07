@@ -15,12 +15,20 @@
 
     const teams = Object.entries(d.teams).map(([t, v]) => ({ team: t, ...v }));
 
-    // title odds (top 16 by champion %)
-    const top = teams.slice().sort((a, b) => b.champion - a.champion).slice(0, 16);
+    // title odds (top 16): teams still in contention first, by champion %.
+    // Eliminated teams (a decisively lost knockout, or missing the R32) only
+    // fill leftover rows once fewer than 16 are alive — crossed out, ordered by
+    // how deep their run went, so late-round losers rank above group-stage exits.
+    const depth = v => v.final * 32 + v.sf * 16 + v.qf * 8 + v.r16 * 4 + v.advance;
+    const top = teams.slice().sort((a, b) =>
+      (a.eliminated ? 1 : 0) - (b.eliminated ? 1 : 0) ||
+      b.champion - a.champion || depth(b) - depth(a)).slice(0, 16);
     document.getElementById('titleTable').innerHTML =
       '<thead><tr><th>Team</th><th>Grp</th><th>Adv</th><th>R16</th><th>QF</th>' +
       '<th>SF</th><th>Final</th><th>Champion</th></tr></thead><tbody>' +
-      top.map(v => `<tr><td class="ot-team">${flag(v.code, v.team)}${v.team}</td>` +
+      top.map(v => `<tr${v.eliminated ? ' class="ot-out"' : ''}>` +
+        `<td class="ot-team">${flag(v.code, v.team)}<span class="ot-name">${v.team}</span>` +
+        `${v.eliminated ? ' <span class="ot-elim">out</span>' : ''}</td>` +
         `<td>${v.group}</td><td>${pct(v.advance)}</td><td>${pct(v.r16)}</td>` +
         `<td>${pct(v.qf)}</td><td>${pct(v.sf)}</td><td>${pct(v.final)}</td>` +
         `<td class="ot-win"><span class="ot-bar" style="width:${Math.round(v.champion * 100)}%"></span>` +
