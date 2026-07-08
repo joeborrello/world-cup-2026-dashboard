@@ -1,18 +1,22 @@
 /* All-games map: every venue at once, each drawn as a ring split into one slice
- * per match it hosts, colored by stage. A legend + stage filter let you see when
- * and where the tournament happens. Times render in the device's local zone. */
+ * per match it hosts, colored by stage. A stage-chip bar above the map selects
+ * one or more stages to visualize where they're played: clicking a chip while
+ * everything is shown isolates that stage; further clicks add/remove stages.
+ * The selection round-trips through ?stages= so a filtered view is shareable.
+ * Times render in the device's local zone. */
 (function () {
-  // Stage buckets (ordered roughly by date) → colors.
+  // Stage buckets (ordered roughly by date) → colors. `slug` is the short,
+  // URL-safe token used by the ?stages= query parameter.
   const STAGES = [
-    { key: 'group', label: 'Group stage', color: '#0b6e4f' },
-    { key: 'Round of 32', label: 'Round of 32', color: '#2f6fb0' },
-    { key: 'Round of 16', label: 'Round of 16', color: '#7a3fb0' },
-    { key: 'Quarter-final', label: 'Quarter-finals', color: '#e08a1e' },
-    { key: 'Semi-final', label: 'Semi-finals', color: '#d0432f' },
-    { key: 'final', label: 'Final & 3rd place', color: '#e3b23c' },
+    { key: 'group', slug: 'group', label: 'Group stage', color: '#0b6e4f' },
+    { key: 'Round of 32', slug: 'r32', label: 'Round of 32', color: '#2f6fb0' },
+    { key: 'Round of 16', slug: 'r16', label: 'Round of 16', color: '#7a3fb0' },
+    { key: 'Quarter-final', slug: 'qf', label: 'Quarter-finals', color: '#e08a1e' },
+    { key: 'Semi-final', slug: 'sf', label: 'Semi-finals', color: '#d0432f' },
+    { key: 'final', slug: 'final', label: 'Final & 3rd place', color: '#e3b23c' },
   ];
-  const COLOR = {};
-  STAGES.forEach(s => COLOR[s.key] = s.color);
+  const COLOR = {}, KEY_BY_SLUG = {};
+  STAGES.forEach(s => { COLOR[s.key] = s.color; KEY_BY_SLUG[s.slug] = s.key; });
 
   function bucket(m) {
     if (m.group) return 'group';
@@ -25,8 +29,46 @@
     maxZoom: 18, attribution: '&copy; OpenStreetMap contributors'
   }).addTo(map);
 
-  const active = new Set(STAGES.map(s => s.key));  // which stages are shown
+  // Which stages are selected. All-selected doubles as "no filter".
+  const active = new Set(STAGES.map(s => s.key));
   let byVenue = {};   // ground -> {venue, matches:[]}
+  const counts = {};  // stage key -> total matches
+
+  // Deep link: ?stages=sf,final preselects stages (unknown tokens ignored).
+  (function initFromUrl() {
+    const q = new URLSearchParams(location.search).get('stages');
+    if (!q) return;
+    const keys = q.split(',').map(t => KEY_BY_SLUG[t.trim()]).filter(Boolean);
+    if (keys.length) { active.clear(); keys.forEach(k => active.add(k)); }
+  })();
+
+  const allOn = () => active.size === STAGES.length;
+
+  function syncUrl() {
+    const url = new URL(location);
+    if (allOn()) url.searchParams.delete('stages');
+    else url.searchParams.set('stages',
+      STAGES.filter(s => active.has(s.key)).map(s => s.slug).join(','));
+    history.replaceState(null, '', url);
+  }
+
+  function selectAll() { STAGES.forEach(s => active.add(s.key)); }
+
+  function onChipClick(key) {
+    if (allOn()) {
+      // Nothing filtered yet: first click isolates that stage.
+      active.clear();
+      active.add(key);
+    } else if (active.has(key)) {
+      active.delete(key);
+      if (!active.size) selectAll();  // deselecting the last stage = back to all
+    } else {
+      active.add(key);
+    }
+    syncUrl();
+    updateChips();
+    render();
+  }
 
   function badgeIcon(matches) {
     // visible matches only, in chronological order
@@ -85,23 +127,55 @@
     if (bounds.length && !map._fitted) { map.fitBounds(bounds, { padding: [40, 40] }); map._fitted = true; }
   }
 
-  function buildLegend() {
-    const tzNote = WCTime.tz ? ` · times in ${WCTime.tz}` : '';
-    document.getElementById('schedLegend').innerHTML =
-      STAGES.map(s => `<span class="leg-item"><i class="leg-dot" style="background:${s.color}"></i>${s.label}</span>`).join('') +
-      `<span class="leg-note">Ring slice = one match${tzNote}</span>`;
-
-    const ul = document.getElementById('stageFilter');
-    ul.innerHTML = STAGES.map(s =>
-      `<li><label><input type="checkbox" data-stage="${s.key}" checked>` +
-      `<i class="leg-dot" style="background:${s.color}"></i>${s.label} ` +
-      `<span class="stage-n" data-stage-n="${s.key}"></span></label></li>`).join('');
-    ul.addEventListener('change', e => {
-      const k = e.target.getAttribute('data-stage');
-      if (!k) return;
-      if (e.target.checked) active.add(k); else active.delete(k);
-      render();
+  function buildChips() {
+    const bar = document.getElementById('stageChips');
+    bar.innerHTML = STAGES.map(s =>
+      `<button type="button" class="stage-chip" data-stage="${s.key}" aria-pressed="true">` +
+      `<i class="leg-dot" style="background:${s.color}"></i>${s.label}` +
+      `<span class="stage-n">${counts[s.key] || 0}</span></button>`).join('') +
+      `<button type="button" class="stage-chip stage-chip-all" id="stageAll">Show all stages</button>`;
+    bar.addEventListener('click', e => {
+      const btn = e.target.closest('button.stage-chip');
+      if (!btn) return;
+      if (btn.id === 'stageAll') {
+        selectAll();
+        syncUrl();
+        updateChips();
+        render();
+        return;
+      }
+      onChipClick(btn.getAttribute('data-stage'));
     });
+  }
+
+  function updateChips() {
+    document.querySelectorAll('#stageChips .stage-chip[data-stage]').forEach(btn => {
+      const on = active.has(btn.getAttribute('data-stage'));
+      btn.classList.toggle('off', !on);
+      btn.setAttribute('aria-pressed', String(on));
+    });
+    const allBtn = document.getElementById('stageAll');
+    if (allBtn) allBtn.hidden = allOn();
+    updateSummary();
+  }
+
+  function updateSummary() {
+    const el = document.getElementById('stageSummary');
+    const tzNote = WCTime.tz ? ` · times in ${WCTime.tz}` : '';
+    const nVenues = Object.keys(byVenue).length;
+    if (allOn()) {
+      el.textContent = `Every stage shown — each ring slice is one match${tzNote}. ` +
+        'Click a stage above to see where it plays out.';
+      return;
+    }
+    let nMatches = 0;
+    const grounds = new Set();
+    Object.entries(byVenue).forEach(([g, entry]) => entry.matches.forEach(m => {
+      if (active.has(bucket(m))) { nMatches++; grounds.add(g); }
+    }));
+    const names = STAGES.filter(s => active.has(s.key)).map(s => s.label).join(' + ');
+    el.textContent = `${names}: ${nMatches} ${nMatches === 1 ? 'match' : 'matches'} ` +
+      `at ${grounds.size} of ${nVenues} venues${tzNote}.`;
   }
 
   Promise.all([
@@ -110,18 +184,14 @@
   ]).then(([venues, matches]) => {
     const vmap = {};
     venues.forEach(v => vmap[v.ground] = v);
-    const counts = {};
     matches.forEach(m => {
       const g = m.ground;
       if (!byVenue[g]) byVenue[g] = { venue: vmap[g] || { stadium: g, city: '', country: '', lat: m.lat, lng: m.lng }, matches: [] };
       byVenue[g].matches.push(m);
       const b = bucket(m); counts[b] = (counts[b] || 0) + 1;
     });
-    buildLegend();
-    Object.entries(counts).forEach(([k, n]) => {
-      const el = document.querySelector(`[data-stage-n="${k}"]`);
-      if (el) el.textContent = `(${n})`;
-    });
+    buildChips();
+    updateChips();
     render();
   });
 })();

@@ -343,23 +343,24 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
 .adv-src { margin-top: .3rem; font-size: .74rem; color: var(--muted); }
 
 /* ── all-games (schedule) map ─────────────────────────── */
-.sched-legend { display: flex; flex-wrap: wrap; gap: .4rem 1rem; align-items: center;
-  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
-  padding: .55rem .8rem; margin-bottom: .9rem; box-shadow: var(--shadow); font-size: .82rem; }
-.leg-item { display: inline-flex; align-items: center; gap: .35rem; color: var(--ink); }
 .leg-dot { width: .8rem; height: .8rem; border-radius: 50%; display: inline-block; }
-.leg-note { color: var(--muted); margin-left: auto; font-style: italic; }
 
-.sched-layout { display: grid; grid-template-columns: 1fr 260px; gap: 1rem; }
-.sched-side { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
-  box-shadow: var(--shadow); padding: .8rem .9rem; align-self: start; }
-.sched-side h3 { margin: .1rem 0 .6rem; color: var(--green-dark); font-size: 1rem; }
-.stage-filter { list-style: none; margin: 0; padding: 0; }
-.stage-filter li { margin: .25rem 0; }
-.stage-filter label { display: flex; align-items: center; gap: .45rem; cursor: pointer; font-size: .9rem; }
-.stage-filter input { accent-color: var(--green); }
-.stage-n { color: var(--muted); font-size: .8rem; }
-.sched-tip { font-size: .78rem; margin: .7rem 0 0; }
+/* Stage chips: the legend IS the selector. A chip is "on" (selected) by default;
+   .off greys it out. The "Show all stages" chip only appears while filtered. */
+.stage-chips { display: flex; flex-wrap: wrap; gap: .45rem;
+  background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+  padding: .55rem .8rem; box-shadow: var(--shadow); }
+.stage-chip { display: inline-flex; align-items: center; gap: .4rem; cursor: pointer;
+  font: inherit; font-size: .84rem; color: var(--ink); background: #fff;
+  border: 1px solid var(--line); border-radius: 999px; padding: .28rem .75rem; }
+.stage-chip:hover { border-color: var(--green); }
+.stage-chip[aria-pressed="true"] { border-color: var(--green); box-shadow: inset 0 0 0 1px var(--green); }
+.stage-chip.off { opacity: .45; box-shadow: none; }
+.stage-chip.off:hover { opacity: .8; }
+.stage-chip .stage-n { color: var(--muted); font-size: .76rem; }
+.stage-chip-all { background: var(--green); border-color: var(--green); color: #fff; font-weight: 600; }
+.stage-chip-all:hover { opacity: .9; }
+.stage-summary { font-size: .82rem; margin: .45rem 0 .9rem; min-height: 1.2em; }
 
 .venue-badge-wrap { background: none; border: none; }
 .venue-badge { border-radius: 50%; box-shadow: 0 0 0 2px #fff, var(--shadow);
@@ -424,8 +425,7 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
 @media (max-width: 760px) {
   .map-layout { grid-template-columns: 1fr; }
   #map { height: 380px; }
-  .sched-layout { grid-template-columns: 1fr; }
-  .sched-legend .leg-note { margin-left: 0; }
+  .stage-chip { font-size: .78rem; padding: .24rem .6rem; }
   .team-list { max-height: 280px; }
   .dl-bar { width: 120px; }
 }

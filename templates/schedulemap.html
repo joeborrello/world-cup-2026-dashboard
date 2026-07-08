@@ -13,20 +13,15 @@
   <h1>Every game, everywhere</h1>
   <p class="subtle">All 104 matches across the 16 host cities at once. Each venue's ring is
     split into one slice per match it hosts, colored by stage — so you can see at a glance
-    <em>when</em> every game happens and where the tournament heats up. Click a venue for its
-    full schedule (times in your local zone).</p>
+    <em>when</em> every game happens and where the tournament heats up. Pick one or more
+    stages below to see where they're played; click a venue for its full schedule (times in
+    your local zone).</p>
 </section>
 
-<div class="sched-legend" id="schedLegend"></div>
+<div class="stage-chips" id="stageChips" role="group" aria-label="Select tournament stages"></div>
+<p class="stage-summary subtle" id="stageSummary"></p>
 
-<div class="sched-layout">
-  <div id="map"></div>
-  <aside class="sched-side">
-    <h3>Filter by stage</h3>
-    <ul id="stageFilter" class="stage-filter"></ul>
-    <p class="subtle sched-tip">Toggle a stage to highlight only those matches on the map.</p>
-  </aside>
-</div>
+<div id="map"></div>
 {% endblock %}
 
 {% block scripts %}
