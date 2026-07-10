@@ -18,7 +18,9 @@ CREATE TABLE IF NOT EXISTS venues (
 
 CREATE TABLE IF NOT EXISTS teams (
     name    TEXT PRIMARY KEY,
-    group_letter TEXT
+    group_letter TEXT,
+    elo     REAL,                 -- pre-tournament Elo prior (edition-specific)
+    is_host INTEGER               -- 1 if a host nation (gets the Elo host bonus)
 );
 
 CREATE TABLE IF NOT EXISTS matches (
@@ -70,8 +72,9 @@ CREATE TABLE IF NOT EXISTS standings (
 """
 
 
-def connect():
-    conn = sqlite3.connect(config.DB_PATH)
+def connect(db_path=None):
+    """Open an edition's SQLite DB (default: the men's 2026 database)."""
+    conn = sqlite3.connect(db_path or config.DB_PATH)
     conn.row_factory = sqlite3.Row
     return conn
 
@@ -80,6 +83,7 @@ def init_schema(conn):
     conn.executescript(SCHEMA)
     _migrate_venue_roof(conn)
     _migrate_match_penalties(conn)
+    _migrate_team_priors(conn)
     conn.commit()
 
 
@@ -114,3 +118,27 @@ def _migrate_match_penalties(conn):
     for col in ("pen1", "pen2"):
         if col not in cols:
             conn.execute(f"ALTER TABLE matches ADD COLUMN {col} INTEGER")
+
+
+def _migrate_team_priors(conn):
+    """Add + backfill teams.elo / teams.is_host on an already-seeded DB.
+
+    Each edition seeds its own Elo priors into the DB (seed_data.py) so the
+    prediction engine can read them there instead of hardcoding the men's
+    static table. A DB seeded before these columns shipped can only be the
+    men's 2026 one, so backfill from the men's priors. Idempotent: a no-op
+    once the columns exist.
+    """
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(teams)")}
+    if "elo" in cols and "is_host" in cols:
+        return
+    import ratings
+    if "elo" not in cols:
+        conn.execute("ALTER TABLE teams ADD COLUMN elo REAL")
+    if "is_host" not in cols:
+        conn.execute("ALTER TABLE teams ADD COLUMN is_host INTEGER")
+    for r in conn.execute("SELECT name FROM teams").fetchall():
+        conn.execute(
+            "UPDATE teams SET elo=?, is_host=? WHERE name=?",
+            (ratings.ELO.get(r["name"], ratings.DEFAULT_ELO),
+             1 if r["name"] in ratings.HOSTS else 0, r["name"]))

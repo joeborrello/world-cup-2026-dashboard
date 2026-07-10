@@ -22,17 +22,27 @@ _KNOCKOUT_ROUNDS = {
 }
 
 
-def fetch_raw(prefer_remote=True):
-    """Return the parsed openfootball JSON, preferring the live remote copy."""
-    if prefer_remote:
+def fetch_raw(prefer_remote=True, url=None, local=None):
+    """Return the parsed openfootball JSON, preferring the live remote copy.
+
+    `url`/`local` select an edition's feed (default: the men's 2026 dataset).
+    Returns None when the edition has no data published anywhere yet — no
+    remote feed configured and no offline snapshot on disk (a future edition
+    until openfootball ships its dataset)."""
+    url = config.OPENFOOTBALL_URL if url is None else url
+    local = config.OPENFOOTBALL_LOCAL if local is None else local
+    if prefer_remote and url:
         try:
-            r = requests.get(config.OPENFOOTBALL_URL, timeout=15)
+            r = requests.get(url, timeout=15)
             r.raise_for_status()
             return r.json()
         except Exception:
             pass  # fall back to the local cached copy
-    with open(config.OPENFOOTBALL_LOCAL, encoding="utf-8") as fh:
-        return json.load(fh)
+    try:
+        with open(local, encoding="utf-8") as fh:
+            return json.load(fh)
+    except FileNotFoundError:
+        return None
 
 
 def _parse_time(date_str, time_str):
