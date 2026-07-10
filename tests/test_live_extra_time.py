@@ -153,7 +153,7 @@ def _fixture(minute):
 
 
 def _run(conn, fixtures):
-    live._CACHE.update(data=None, ts=0.0, checked_at=None)  # bypass the TTL cache
+    live._CACHE.clear()  # bypass the TTL cache (now keyed per edition)
     with mock.patch.object(config, "FOOTBALL_DATA_API_KEY", "test-key"), \
             mock.patch.object(live.requests, "get") as g:
         g.return_value.json.return_value = {"matches": fixtures}

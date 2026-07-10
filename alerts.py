@@ -21,7 +21,7 @@ import db
 
 UA = "WorldCup2026Dashboard/1.0 (joe@josephborrello.com)"
 TTL_SECONDS = 600
-_CACHE = {"fc": None, "ts": 0.0}
+_CACHE = {}     # edition key -> {"fc": ..., "ts": ...} (one cache per tournament)
 
 # severity / risk -> color
 COLOR = {
@@ -115,11 +115,16 @@ def _mx_alerts(venues):
     return []
 
 
-def active_alerts(conn, force=False):
-    """FeatureCollection of active advisories near the venues (cached)."""
+def active_alerts(conn, force=False, key="men"):
+    """FeatureCollection of active advisories near the venues (cached per edition).
+
+    Coverage is per-country: venues in a country without a free machine feed
+    (Mexico, and Brazil for the women's edition) simply contribute no features.
+    """
     now = time.time()
-    if not force and _CACHE["fc"] is not None and now - _CACHE["ts"] < TTL_SECONDS:
-        return _CACHE["fc"]
+    cache = _CACHE.setdefault(key, {"fc": None, "ts": 0.0})
+    if not force and cache["fc"] is not None and now - cache["ts"] < TTL_SECONDS:
+        return cache["fc"]
 
     by_country = _venues_by_country(conn)
     feats = []
@@ -127,11 +132,12 @@ def active_alerts(conn, force=False):
     feats += _ca_alerts(by_country.get("Canada", []))
     feats += _mx_alerts(by_country.get("Mexico", []))
 
+    coverage = {"USA": "nws", "Canada": "msc-geomet", "Mexico": "unavailable"}
     fc = {
         "type": "FeatureCollection",
         "features": feats,
         "generated": datetime.now(timezone.utc).isoformat(),
-        "coverage": {"USA": "nws", "Canada": "msc-geomet", "Mexico": "unavailable"},
+        "coverage": {c: coverage.get(c, "unavailable") for c in by_country},
     }
-    _CACHE.update(fc=fc, ts=now)
+    cache.update(fc=fc, ts=now)
     return fc
