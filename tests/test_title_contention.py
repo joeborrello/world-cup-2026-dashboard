@@ -40,9 +40,11 @@ def _gm(num, group, t1, t2, status="finished", s1=1, s2=0):
 
 
 def _ko(num, t1, t2, status="scheduled", s1=None, s2=None, p1=None, p2=None):
+    # "round" mirrors what _aggregate now reads from the DB's round_label;
+    # the fabricated fixtures use the men's 2026 numbering, so derive it.
     return {"num": num, "slot1": "W0", "slot2": "W0", "status": status,
             "team1": t1, "team2": t2, "score1": s1, "score2": s2,
-            "pen1": p1, "pen2": p2}
+            "pen1": p1, "pen2": p2, "round": predict.round_of(num)}
 
 
 TEAMS = {"AA": "A", "AB": "A", "BA": "B", "BB": "B"}

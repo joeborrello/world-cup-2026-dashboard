@@ -147,7 +147,19 @@ def _sim_winner(ta, tb, R):
 
 
 # ── bracket structure helpers ────────────────────────────────────────────────
+# openfootball round label -> the short round key used across the API/UI. The
+# engine reads each match's round from the data rather than from a hardcoded
+# match-number range, so a 32-team edition (whose knockout starts at the Round
+# of 16) works exactly like the 48-team one.
+ROUND_KEYS = {
+    "Round of 32": "r32", "Round of 16": "r16", "Quarter-final": "qf",
+    "Semi-final": "sf", "Match for third place": "third", "Final": "final",
+}
+
+
 def round_of(num):
+    """Round key from the men's-2026 match numbering (73..104). Legacy helper —
+    the engine itself carries each match's round from its DB round_label."""
     if 73 <= num <= 88:
         return "r32"
     if 89 <= num <= 96:
@@ -173,10 +185,11 @@ def _eliminated_teams(group_fixtures, ko, team_group):
          level match with no penalties recorded yet decides nothing — see
          _finished_decision). The semifinal losers meet again in the third-place
          match, but both are already out of the *title* race by then.
-      2. Missing the Round of 32: once every group match is finished AND the
-         feed has resolved every R32 pairing to real team names, everyone not
-         in that 32-team field is out. Until both hold (best-third assignment
-         can lag the last whistle), nobody is eliminated on group results.
+      2. Missing the opening knockout round (R32 for the 48-team format, R16
+         for a 32-team one): once every group match is finished AND the feed
+         has resolved every opening-round pairing to real team names, everyone
+         not in that field is out. Until both hold (best-third assignment can
+         lag the last whistle), nobody is eliminated on group results.
     """
     out = set()
     for m in ko:
@@ -184,9 +197,12 @@ def _eliminated_teams(group_fixtures, ko, team_group):
         if decided:
             out.add(decided[1])
     if group_fixtures and all(gm["status"] == "finished" for gm in group_fixtures):
-        r32 = [m for m in ko if round_of(m["num"]) == "r32"]
-        if r32 and all(m["team1"] and m["team2"] for m in r32):
-            field = {m[side] for m in r32 for side in ("team1", "team2")}
+        # opening knockout round = the round of the lowest-numbered ko match
+        # (every feeder is lower-numbered, so the first ko match is in it)
+        first = min(ko, key=lambda m: m["num"], default=None)
+        opening = [m for m in ko if first and m["round"] == first["round"]]
+        if opening and all(m["team1"] and m["team2"] for m in opening):
+            field = {m[side] for m in opening for side in ("team1", "team2")}
             out |= set(team_group) - field
     return out & set(team_group)
 
@@ -238,8 +254,9 @@ def _sim_once(group_fixtures, ko, third_slots, R):
                           "score1": s1, "score2": s2})
     standings = {g: compute.order_group(tbl, played[g]) for g, tbl in table.items()}
 
-    # 2) best-third assignment onto the R32 "3X/Y" slots
-    thirds = compute.rank_third_place(standings)
+    # 2) best-third assignment onto the R32 "3X/Y" slots (none in a 32-team
+    # edition, whose bracket has no such slots — n_qualify is then 0)
+    thirds = compute.rank_third_place(standings, n_qualify=len(third_slots))
     team_of_group = {r["group_letter"]: r["team"]
                      for r in thirds if r.get("qualified_third")}
     third_assign = _assign_thirds(third_slots, set(team_of_group), team_of_group)
@@ -301,38 +318,50 @@ def _aggregate(conn, sims):
         {"num": r["num"], "slot1": r["team1_slot"], "slot2": r["team2_slot"],
          "status": r["status"], "team1": r["team1"], "team2": r["team2"],
          "score1": r["score1"], "score2": r["score2"],
-         "pen1": r["pen1"], "pen2": r["pen2"]}
+         "pen1": r["pen1"], "pen2": r["pen2"],
+         "round": ROUND_KEYS.get(r["round_label"])}
         for r in conn.execute(
             "SELECT num, team1_slot, team2_slot, status, team1, team2, "
-            "score1, score2, pen1, pen2 FROM matches WHERE stage='knockout' ORDER BY num")
+            "score1, score2, pen1, pen2, round_label "
+            "FROM matches WHERE stage='knockout' ORDER BY num")
     ]
+    # best-third "3X/Y" slots only exist in the 48-team format's opening round;
+    # matching on the slot text keeps this a no-op for a 32-team edition
     third_slots = []
     for m in ko:
-        if round_of(m["num"]) == "r32":
-            for side, slot in (("team1", m["slot1"]), ("team2", m["slot2"])):
-                tm = THIRD_SLOT_RE.match(slot or "")
-                if tm:
-                    third_slots.append((m["num"], side, set(tm.group(1).split("/"))))
+        for side, slot in (("team1", m["slot1"]), ("team2", m["slot2"])):
+            tm = THIRD_SLOT_RE.match(slot or "")
+            if tm:
+                third_slots.append((m["num"], side, set(tm.group(1).split("/"))))
 
     team_group = {gm["team1"]: gm["group"] for gm in group_fixtures}
     team_group.update({gm["team2"]: gm["group"] for gm in group_fixtures})
 
-    # Dynamic Elo: adjust the static priors by the finished results (in order),
-    # then add the host edge. `R` (effective ratings) drives every simulated
-    # match and the projected-bracket propagation, so the projection reflects
-    # in-tournament form rather than only the pre-tournament snapshot.
+    # Dynamic Elo: adjust the edition's priors (as seeded into teams.elo /
+    # teams.is_host — see ratings.db_priors) by the finished results (in
+    # order), then add the host edge. `R` (effective ratings) drives every
+    # simulated match and the projected-bracket propagation, so the projection
+    # reflects in-tournament form rather than only the pre-tournament snapshot.
+    prior_elo, prior_hosts = ratings.db_priors(conn)
     finished = conn.execute(
         "SELECT team1, team2, score1, score2 FROM matches "
         "WHERE status='finished' AND score1 IS NOT NULL "
         "AND team1 IS NOT NULL AND team2 IS NOT NULL "
         "ORDER BY utc_datetime, num").fetchall()
-    base = ratings.dynamic_ratings(finished)
-    R = {t: base.get(t, ratings.DEFAULT_ELO) + (ratings.HOST_BONUS if t in ratings.HOSTS else 0)
+    base = ratings.dynamic_ratings(finished, elo=prior_elo, hosts=prior_hosts)
+    R = {t: base.get(t, ratings.DEFAULT_ELO) + (ratings.HOST_BONUS if t in prior_hosts else 0)
          for t in team_group}
 
     rank_counts = {t: Counter() for t in team_group}      # team -> {rank: n}
     reach = {t: Counter() for t in team_group}            # team -> {round: n}
     slot_counts = {m["num"]: {"team1": Counter(), "team2": Counter()} for m in ko}
+
+    round_key = {m["num"]: m["round"] for m in ko}
+    final_num = next((m["num"] for m in ko if m["round"] == "final"), None)
+    # "advance" = reaching the opening knockout round, whichever round that is
+    # for this edition's format (r32 for 48 teams, r16 for 32)
+    first_m = min(ko, key=lambda m: m["num"], default=None)
+    first_ko_round = first_m["round"] if first_m else "r32"
 
     for _ in range(sims):
         standings, results = _sim_once(group_fixtures, ko, third_slots, R)
@@ -341,7 +370,7 @@ def _aggregate(conn, sims):
                 rank_counts[r["team"]][r["rank"]] += 1
         present = {"r32": set(), "r16": set(), "qf": set(), "sf": set(), "final": set()}
         for num, res in results.items():
-            rnd = round_of(num)
+            rnd = round_key.get(num)
             if rnd in present:
                 for t in (res["team1"], res["team2"]):
                     if t:
@@ -352,7 +381,7 @@ def _aggregate(conn, sims):
         for rnd, teams in present.items():
             for t in teams:
                 reach[t][rnd] += 1
-        champ = results.get(104, {}).get("winner")
+        champ = results.get(final_num, {}).get("winner") if final_num else None
         if champ:
             reach[champ]["champion"] += 1
 
@@ -364,9 +393,9 @@ def _aggregate(conn, sims):
         rc, rr = rank_counts[t], reach[t]
         teams_out[t] = {
             "group": g, "elo": round(R.get(t, ratings.DEFAULT_ELO)),
-            "elo_prior": round(ratings.get_rating(t)),
+            "elo_prior": round(ratings.get_rating(t, elo=prior_elo, hosts=prior_hosts)),
             "p_first": rc[1] / n, "p_second": rc[2] / n, "p_third": rc[3] / n,
-            "advance": rr["r32"] / n, "r16": rr["r16"] / n, "qf": rr["qf"] / n,
+            "advance": rr[first_ko_round] / n, "r16": rr["r16"] / n, "qf": rr["qf"] / n,
             "sf": rr["sf"] / n, "final": rr["final"] / n, "champion": rr["champion"] / n,
             "eliminated": t in eliminated,
         }
@@ -486,7 +515,7 @@ def _project(agg, overrides):
 
     slots_out = {}
     for num in slot_counts:
-        entry = {"round": round_of(num)}
+        entry = {"round": ko_meta.get(num, {}).get("round")}
         m = ko_meta.get(num)
         # a decisively-settled match (a real winner, penalties included) can't be
         # re-picked, so mark it locked (the UI shows it non-interactive instead of
@@ -518,8 +547,16 @@ def _norm_overrides(overrides):
 
 
 # ── cache (recompute the heavy aggregate only when the result set changes) ────
+# Keyed by database file so each edition (men's / women's DB) keeps its own
+# aggregate — a single shared slot would make alternating requests for the two
+# tournaments evict each other's sims on every swap.
 _lock = threading.Lock()
-_cache = {"key": None, "agg": None}
+_cache = {}                       # db path -> {"key": ..., "agg": ...}
+
+
+def _db_file(conn):
+    """Path of the main database attached to this connection ('' for :memory:)."""
+    return conn.execute("PRAGMA database_list").fetchone()[2] or ":memory:"
 
 
 def _aggregate_cached(conn, sims, seed):
@@ -537,14 +574,16 @@ def _aggregate_cached(conn, sims, seed):
         "  + COALESCE(pen1, 0) * 53 + COALESCE(pen2, 0) * 31), 0) "
         "FROM matches WHERE status='finished'").fetchone()
     key = (sig[0], sig[1], sims, seed)
+    slot = _db_file(conn)
     with _lock:
-        if _cache["key"] == key and _cache["agg"] is not None:
-            return _cache["agg"]
+        ent = _cache.get(slot)
+        if ent and ent["key"] == key and ent["agg"] is not None:
+            return ent["agg"]
     if seed is not None:
         random.seed(seed)
     agg = _aggregate(conn, sims)
     with _lock:
-        _cache["key"], _cache["agg"] = key, agg
+        _cache[slot] = {"key": key, "agg": agg}
     return agg
 
 

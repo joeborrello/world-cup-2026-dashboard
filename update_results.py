@@ -21,6 +21,7 @@ import compute
 import config
 import data_source
 import db
+import editions
 import goldenboot
 
 # openfootball uses these as knockout slot placeholders until a matchup is decided.
@@ -28,8 +29,12 @@ _THIRD_SLOT_RE = re.compile(r"^3[A-L/]+$")
 _ANY_SLOT_RE = re.compile(r"^(?:[12][A-L]|3[A-L/]+|W\d+|L\d+)$")
 
 
-def _update_from_openfootball(conn, prefer_remote=True):
-    raw = data_source.fetch_raw(prefer_remote=prefer_remote)
+def _update_from_openfootball(conn, prefer_remote=True, edition=editions.DEFAULT):
+    raw = data_source.fetch_raw(prefer_remote=prefer_remote,
+                                url=edition.openfootball_url,
+                                local=edition.openfootball_local)
+    if raw is None:
+        return 0        # edition has no published fixture data yet
     matches = data_source.normalize(raw)
     changed = 0
     for m in matches:
@@ -214,8 +219,9 @@ def _undecided_knockout(row):
     )
 
 
-def _update_from_football_data(conn):
-    """Best-effort overlay from football-data.org. Silent no-op without a key.
+def _update_from_football_data(conn, edition=editions.DEFAULT):
+    """Best-effort overlay from football-data.org. Silent no-op without a key
+    (or for an edition football-data.org has no competition feed for yet).
 
     openfootball is authoritative for final SCORES; this surfaces scores for
     matches openfootball hasn't settled, and — crucially — is still queried to
@@ -224,11 +230,11 @@ def _update_from_football_data(conn):
     bracket stalls or advances the wrong side). It only ever acts when team names
     align, so it can never corrupt a final.
     """
-    if not config.FOOTBALL_DATA_API_KEY:
+    if not config.FOOTBALL_DATA_API_KEY or not edition.football_data_url:
         return 0
     try:
         r = requests.get(
-            config.FOOTBALL_DATA_URL,
+            edition.football_data_url,
             headers={"X-Auth-Token": config.FOOTBALL_DATA_API_KEY},
             timeout=15,
         )
@@ -296,23 +302,30 @@ def _update_from_football_data(conn):
     return changed
 
 
-def main(prefer_remote=True):
-    conn = db.connect()
+def main(prefer_remote=True, edition=editions.DEFAULT):
+    if not edition.openfootball_url and not edition.football_data_url:
+        # nothing to poll for this edition yet (women's 2027 pre-dataset) —
+        # skip quietly instead of hammering feeds that don't exist
+        print(f"[{edition.key}] no data feeds configured yet; skipped.")
+        return
+    conn = db.connect(edition.db_path)
     # Idempotently apply the schema first so a deploy that adds a new table
     # (e.g. `scorers` for the Golden Boot tracker) reaches an already-seeded
     # production DB on the next cron run — pull + restart is then enough, no
     # manual migration needed. CREATE TABLE IF NOT EXISTS makes this a no-op
     # once the table exists.
     db.init_schema(conn)
-    a = _update_from_openfootball(conn, prefer_remote=prefer_remote)
-    b = _update_from_football_data(conn)
+    a = _update_from_openfootball(conn, prefer_remote=prefer_remote, edition=edition)
+    b = _update_from_football_data(conn, edition=edition)
     compute.recompute_all(conn)
     n_finished = conn.execute(
         "SELECT COUNT(*) FROM matches WHERE status='finished'").fetchone()[0]
     conn.close()
-    print(f"Updated {a} (openfootball) + {b} (football-data) matches; "
-          f"{n_finished} finished total.")
+    print(f"Updated [{edition.key}] {a} (openfootball) + {b} (football-data) "
+          f"matches; {n_finished} finished total.")
 
 
 if __name__ == "__main__":
-    main(prefer_remote="--offline" not in sys.argv)
+    # one cron entry refreshes every edition that has a live feed
+    for _key, _edition in editions.EDITIONS.items():
+        main(prefer_remote="--offline" not in sys.argv, edition=_edition)

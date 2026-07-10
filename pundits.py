@@ -87,8 +87,10 @@ PERSONAS = [
     ("The Veteran", "weighs experience, big-game temperament and form"),
 ]
 
+# __TOURNAMENT__ is substituted per edition ("the 2026 World Cup" /
+# "the 2027 Women's World Cup") when the panel is generated.
 SYSTEM = (
-    "You are a panel of four football pundits previewing the 2026 World Cup. "
+    "You are a panel of four football pundits previewing __TOURNAMENT__. "
     "The members are: " + "; ".join(f"{n} ({d})" for n, d in PERSONAS) + ". "
     "You are given a statistical model's probabilities and the current standings. "
     "Ground your opinions in those numbers (you may push back on them with reasoning, "
@@ -235,8 +237,11 @@ def _scope_title(scope):
     return "Title race"
 
 
-def panel(conn, scope):
-    """Return the pundit panel for a scope ('group:A' | 'knockout'), cached."""
+def panel(conn, scope, tournament="the 2026 World Cup"):
+    """Return the pundit panel for a scope ('group:A' | 'knockout'), cached.
+
+    `tournament` names the edition in the pundits' briefing; the cache and
+    budget tables live in the edition's own DB, so scopes never collide."""
     if not available():
         return {"available": False,
                 "message": "The claude CLI is not on the server — the AI pundit panel is unavailable."}
@@ -262,7 +267,8 @@ def panel(conn, scope):
     context = _context(conn, preds, scope)
 
     try:
-        text, usage = _claude_cli(SYSTEM, f"Preview: {_scope_title(scope)}.\n\n{context}")
+        text, usage = _claude_cli(SYSTEM.replace("__TOURNAMENT__", tournament),
+                                  f"Preview: {_scope_title(scope)}.\n\n{context}")
         _log_call(conn, scope, usage)   # bill it the moment the call succeeds
         if text.startswith("```"):
             text = text.strip("`").split("\n", 1)[-1].rsplit("```", 1)[0]

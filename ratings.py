@@ -41,10 +41,33 @@ HOST_BONUS = 60          # Elo points, applied to a host nation's rating
 DEFAULT_ELO = 1700       # fallback for any name not found
 
 
-def get_rating(team, host_match=False):
-    """Elo for a team; add the host bonus for co-hosts (always at home venues)."""
-    base = ELO.get(team or "", DEFAULT_ELO)
-    if team in HOSTS:
+def db_priors(conn):
+    """(Elo dict, host set) as seeded into this DB's teams table.
+
+    The DB is the edition-agnostic source of truth: seed_data writes each
+    edition's priors into teams.elo / teams.is_host, so the prediction engine
+    can serve any tournament from the connection alone. Teams without a
+    stored prior (pre-migration rows) fall back to the men's static table —
+    the only DB that can predate the columns."""
+    elo, hosts = {}, set()
+    try:
+        rows = conn.execute("SELECT name, elo, is_host FROM teams").fetchall()
+    except Exception:
+        return dict(ELO), set(HOSTS)
+    for r in rows:
+        elo[r["name"]] = r["elo"] if r["elo"] is not None else ELO.get(r["name"], DEFAULT_ELO)
+        if r["is_host"]:
+            hosts.add(r["name"])
+    return elo, hosts
+
+
+def get_rating(team, host_match=False, elo=None, hosts=None):
+    """Elo for a team; add the host bonus for hosts (always at home venues).
+    `elo`/`hosts` select an edition's priors (default: the men's static tables)."""
+    elo = ELO if elo is None else elo
+    hosts = HOSTS if hosts is None else hosts
+    base = elo.get(team or "", DEFAULT_ELO)
+    if team in hosts:
         base += HOST_BONUS
     return base
 
@@ -74,20 +97,23 @@ def _goal_mult(diff):
     return (11 + diff) / 8.0
 
 
-def dynamic_ratings(finished, k=None):
+def dynamic_ratings(finished, k=None, elo=None, hosts=None):
     """Replay finished matches (chronological order) and return adjusted base
     ratings {team: rating}. `finished` rows expose team1/team2/score1/score2.
-    k=0 leaves the static priors untouched."""
+    k=0 leaves the static priors untouched. `elo`/`hosts` select the edition's
+    priors (default: the men's static tables)."""
     k = ELO_K if k is None else k
-    rt = dict(ELO)
+    elo = ELO if elo is None else elo
+    hosts = HOSTS if hosts is None else hosts
+    rt = dict(elo)
     if not k:
         return rt
     for m in finished:
         ta, tb, sa, sb = m["team1"], m["team2"], m["score1"], m["score2"]
         if ta is None or tb is None or sa is None or sb is None:
             continue
-        ra = rt.get(ta, DEFAULT_ELO) + (HOST_BONUS if ta in HOSTS else 0)
-        rb = rt.get(tb, DEFAULT_ELO) + (HOST_BONUS if tb in HOSTS else 0)
+        ra = rt.get(ta, DEFAULT_ELO) + (HOST_BONUS if ta in hosts else 0)
+        rb = rt.get(tb, DEFAULT_ELO) + (HOST_BONUS if tb in hosts else 0)
         we_a = 1.0 / (1.0 + 10 ** (-(ra - rb) / 400.0))
         w_a = 1.0 if sa > sb else 0.5 if sa == sb else 0.0
         delta = k * _goal_mult(abs(sa - sb)) * (w_a - we_a)

@@ -50,8 +50,9 @@ def _spawn(fn, *args):
 # top-level branches / children per node / levels below the root question.
 MAX_BRANCHES, MAX_CHILDREN, MAX_DEPTH = 6, 4, 2
 
+# __TOURNAMENT__ is substituted per edition when a map is generated.
 SYSTEM = (
-    "You are a football scenario analyst mapping out 2026 World Cup what-if "
+    "You are a football scenario analyst mapping out __TOURNAMENT__ what-if "
     "questions on a whiteboard. You are given today's date, the results of every "
     "match already played, the current standings, remaining fixtures, and a "
     "statistical model's odds (Elo + Monte-Carlo). The tournament is underway and "
@@ -79,10 +80,14 @@ def normalize_question(question):
     return re.sub(r"\s+", " ", (question or "").strip())
 
 
-def _scope(question):
-    """Cache scope for a question (keys pundit_cache rows and pundit_calls logs)."""
+def _scope(question, edition_key="men"):
+    """Cache scope for a question (keys pundit_cache rows, pundit_calls logs and
+    the in-process job table). The edition is part of the key so the same
+    question asked about both tournaments never shares a job slot; the men's
+    key keeps its historical unprefixed form so existing cache rows stay hits."""
     digest = hashlib.sha1(question.lower().encode()).hexdigest()[:16]
-    return f"whatif:{digest}"
+    prefix = "whatif" if edition_key == "men" else f"whatif-{edition_key}"
+    return f"{prefix}:{digest}"
 
 
 def _context(conn, preds):
@@ -218,17 +223,19 @@ def _answer(conn, q, payload, cached):
             "budget": pundits.budget_status(conn), **payload}
 
 
-def _generate(q, scope, sh):
+def _generate(q, scope, sh, db_path=None, tournament="the 2026 World Cup"):
     """Background job body: one CLI call → normalized tree → cache + job entry.
 
-    Runs off-request on its own DB connection; the billing row is written the
-    moment the CLI call succeeds, exactly as the synchronous version did.
+    Runs off-request on its own DB connection (`db_path` selects the asking
+    edition's database); the billing row is written the moment the CLI call
+    succeeds, exactly as the synchronous version did.
     """
-    conn = db.connect()
+    conn = db.connect(db_path)
     try:
         preds = predict.predictions(conn)
         context = _context(conn, preds)
-        text, usage = pundits._claude_cli(SYSTEM, f"Question: {q}\n\n{context}")
+        text, usage = pundits._claude_cli(SYSTEM.replace("__TOURNAMENT__", tournament),
+                                          f"Question: {q}\n\n{context}")
         pundits._log_call(conn, scope, usage)
         if text.startswith("```"):
             text = text.strip("`").split("\n", 1)[-1].rsplit("```", 1)[0]
@@ -251,8 +258,10 @@ def _generate(q, scope, sh):
         conn.close()
 
 
-def ask(conn, question):
+def ask(conn, question, edition=None):
     """Handle a POST: the cached map instantly, or start background generation.
+    `edition` scopes the job + cache and points the background thread at the
+    right database (None = the men's edition, as before).
 
     Returns a dict the API returns verbatim — an error/limit envelope,
     {"available": True, "pending": True, ...} when a job is running (the page
@@ -269,7 +278,7 @@ def ask(conn, question):
                            "the scenario mapper is unavailable."}
 
     pundits._ensure_cache(conn)
-    scope = _scope(q)
+    scope = _scope(q, edition.key if edition else "men")
     sh = pundits._state_hash(conn, scope)
     row = _cache_row(conn, scope, sh)
     if row:  # cache hits are free — never blocked by the budget
@@ -290,11 +299,13 @@ def ask(conn, question):
             return {"available": False, "limited": True, "budget": bs,
                     "message": blocked}
         _jobs[scope] = {"status": "running"}
-    _spawn(_generate, q, scope, sh)
+    _spawn(_generate, q, scope, sh,
+           edition.db_path if edition else None,
+           edition.prompt_name if edition else "the 2026 World Cup")
     return {"available": True, "pending": True, "question": q, "budget": bs}
 
 
-def poll(conn, question):
+def poll(conn, question, edition=None):
     """Handle a status poll for a previously POSTed question.
 
     Returns the finished map, a pending envelope while the job runs, an error
@@ -306,7 +317,7 @@ def poll(conn, question):
         return bad
 
     pundits._ensure_cache(conn)
-    scope = _scope(q)
+    scope = _scope(q, edition.key if edition else "men")
     sh = pundits._state_hash(conn, scope)
     row = _cache_row(conn, scope, sh)
     with _jobs_lock:
