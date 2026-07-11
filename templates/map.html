@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Map · World Cup 2026{% endblock %}
+{% block title %}Map · {{ edition.title }}{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -60,11 +60,11 @@
 {% block scripts %}
 <script>
   window.WC = {
-    daysUrl: "{{ url_for('api_days') }}",
-    matchesUrl: "{{ url_for('api_matches') }}",
-    venuesUrl: "{{ url_for('api_venues') }}",
-    weatherUrl: "{{ url_for('api_weather') }}",
-    alertsUrl: "{{ url_for('api_alerts') }}",
+    daysUrl: "{{ url_for('.api_days') }}",
+    matchesUrl: "{{ url_for('.api_matches') }}",
+    venuesUrl: "{{ url_for('.api_venues') }}",
+    weatherUrl: "{{ url_for('.api_weather') }}",
+    alertsUrl: "{{ url_for('.api_alerts') }}",
     owmKey: "{{ owm_key }}"
   };
 </script>

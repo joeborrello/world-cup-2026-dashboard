@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Bracket · World Cup 2026{% endblock %}
+{% block title %}Bracket · {{ edition.title }}{% endblock %}
 
 {% macro bmatch(m, kind, side) -%}
 <div class="bmatch {{ m.status }}{{ ' is-third' if kind == 'third' }}"
@@ -79,7 +79,7 @@
       </select>
     </label>
     <button type="button" id="resetPicks" class="pick-reset" disabled>Reset picks</button>
-    <a class="pred-link" href="{{ url_for('predictions_page') }}">Full odds →</a>
+    <a class="pred-link" href="{{ url_for('.predictions_page') }}">Full odds →</a>
     <button type="button" class="meth-btn" data-modal-open="methodologyModal">
       <span class="qm">?</span> How projections work</button>
   </div>
@@ -145,6 +145,6 @@
 {% endblock %}
 
 {% block scripts %}
-<script>window.WC = { bracketPredUrl: "{{ url_for('api_bracket_predicted') }}" };</script>
+<script>window.WC = { bracketPredUrl: "{{ url_for('.api_bracket_predicted') }}" };</script>
 <script src="{{ url_for('static', filename='js/bracket.js') }}"></script>
 {% endblock %}

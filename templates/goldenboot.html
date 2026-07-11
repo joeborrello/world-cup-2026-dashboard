@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Golden Boot · World Cup 2026{% endblock %}
+{% block title %}Golden Boot · {{ edition.title }}{% endblock %}
 
 {% block content %}
 <section class="hero">
@@ -8,7 +8,7 @@
     projected <em>range</em> of the goals each contender is on course to add. Penalties count;
     own goals don't. Projected ranges carry each player's scoring rate over the matches their
     team is still expected to play, from the
-    <a href="{{ url_for('predictions_page') }}">Monte-Carlo model</a>.</p>
+    <a href="{{ url_for('.predictions_page') }}">Monte-Carlo model</a>.</p>
 </section>
 
 {% if gb.contenders %}

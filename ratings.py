@@ -1,7 +1,8 @@
 """Team strength priors for the prediction engine.
 
-World-Football-Elo-style ratings (~early-2026 snapshot) for the 48 finalists,
-keyed by the exact `teams.name` used in the DB. These are static priors; the
+World-Football-Elo-style ratings (~early-2026 snapshot) per edition — the 48
+men's finalists plus the likely 2027 Women's World Cup field below — keyed by
+the exact `teams.name` used in the DB. These are static priors; the
 Monte-Carlo holds finished results fixed, so the projection self-corrects as the
 tournament unfolds even if a prior is a little off. A live refresh (e.g. scraping
 eloratings.net) is a possible later enhancement.
@@ -39,6 +40,28 @@ ELO = {
 HOSTS = {"USA", "Canada", "Mexico"}
 HOST_BONUS = 60          # Elo points, applied to a host nation's rating
 DEFAULT_ELO = 1700       # fallback for any name not found
+
+# ── 2027 Women's World Cup priors ────────────────────────────────────────────
+# Same scale as ELO above (~2100+ elite), for the women's national teams likely
+# to reach Brazil 2027. Qualification runs into early 2027, so this covers the
+# plausible field rather than a confirmed 32; anyone who qualifies without a row
+# here starts at DEFAULT_ELO. seed_data copies the edition's priors into the DB
+# (teams.elo / teams.is_host), which is what the prediction engine actually
+# reads — so refining a rating only needs this table + a reseed.
+WOMENS_ELO = {
+    "Spain": 2190, "USA": 2170, "England": 2130, "Germany": 2110,
+    "Japan": 2070, "Sweden": 2050, "France": 2040, "Brazil": 2030,
+    "Canada": 2000, "North Korea": 1990, "Netherlands": 1980, "Australia": 1960,
+    "Italy": 1940, "Denmark": 1930, "Norway": 1920, "Iceland": 1910,
+    "China": 1880, "South Korea": 1860, "Austria": 1850, "Belgium": 1850,
+    "Portugal": 1840, "Switzerland": 1830, "Colombia": 1820, "Ireland": 1810,
+    "Scotland": 1790, "Finland": 1780, "Poland": 1770, "Czech Republic": 1760,
+    "Mexico": 1760, "New Zealand": 1740, "Argentina": 1740, "Nigeria": 1730,
+    "Wales": 1720, "Zambia": 1700, "South Africa": 1690, "Morocco": 1680,
+    "Haiti": 1650, "Jamaica": 1650, "Paraguay": 1640, "Venezuela": 1630,
+    "Vietnam": 1580, "Philippines": 1570, "Costa Rica": 1560, "Panama": 1540,
+}
+WOMENS_HOSTS = {"Brazil"}
 
 
 def db_priors(conn):

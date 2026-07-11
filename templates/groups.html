@@ -1,16 +1,16 @@
 {% extends "base.html" %}
-{% block title %}Groups · World Cup 2026{% endblock %}
+{% block title %}Groups · {{ edition.title }}{% endblock %}
 
 {% block content %}
 <section class="hero">
   <h1>Group standings</h1>
-  <p class="subtle">Top 2 of each group advance, plus the 8 best 3rd-placed teams →
-    <a href="{{ url_for('bracket') }}">Round of 32</a></p>
+  <p class="subtle">Top 2 of each group advance{% if n_thirds %}, plus the {{ n_thirds }} best 3rd-placed teams{% endif %} →
+    <a href="{{ url_for('.bracket') }}">{{ opening_round }}</a></p>
 </section>
 
 <div class="legend">
   <span class="dot adv"></span> advances directly (top 2)
-  <span class="dot third"></span> 3rd place — best 8 advance
+  {% if n_thirds %}<span class="dot third"></span> 3rd place — best {{ n_thirds }} advance{% endif %}
   <span class="dot out"></span> eliminated
 </div>
 

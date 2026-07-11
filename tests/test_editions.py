@@ -1,7 +1,8 @@
 """The editions abstraction (JOE-46): edition-specific config lives on an
 Edition object, and db.py / seed_data.py take an Edition instead of reading
-module-level 2026 constants. The men's 2026 edition is the only registered
-edition and default behavior is unchanged."""
+module-level 2026 constants. Two editions are registered — the men's 2026
+tournament (the default, at the site root) and the 2027 Women's World Cup
+under /women (JOE-48) — and default behavior is unchanged."""
 
 import dataclasses
 import os
@@ -20,15 +21,16 @@ import venues
 
 # ---------------------------------------------------------------- registry
 
-def test_men_is_the_only_registered_edition():
-    assert set(editions.EDITIONS) == {"men"}
+def test_both_editions_are_registered():
+    assert set(editions.EDITIONS) == {"men", "women"}
     assert editions.EDITIONS["men"] is editions.MEN
+    assert editions.EDITIONS["women"] is editions.WOMEN
     assert editions.DEFAULT is editions.MEN
 
 
 def test_get_falls_back_to_default_for_unknown_keys():
     assert editions.get("men") is editions.MEN
-    assert editions.get("women") is editions.MEN     # not registered yet
+    assert editions.get("women") is editions.WOMEN
     assert editions.get("bogus") is editions.MEN
     assert editions.get(None) is editions.MEN
 

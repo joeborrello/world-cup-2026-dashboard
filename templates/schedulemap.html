@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}All games · World Cup 2026{% endblock %}
+{% block title %}All games · {{ edition.title }}{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -11,7 +11,7 @@
 {% block content %}
 <section class="hero">
   <h1>Every game, everywhere</h1>
-  <p class="subtle">All 104 matches across the 16 host cities at once. Each venue's ring is
+  <p class="subtle">All {{ n_matches }} matches across the {{ n_venues }} host cities at once. Each venue's ring is
     split into one slice per match it hosts, colored by stage — so you can see at a glance
     <em>when</em> every game happens and where the tournament heats up. Click a venue for its
     full schedule (times in your local zone).</p>
@@ -32,8 +32,8 @@
 {% block scripts %}
 <script>
   window.WC = {
-    matchesUrl: "{{ url_for('api_matches') }}",
-    venuesUrl: "{{ url_for('api_venues') }}"
+    matchesUrl: "{{ url_for('.api_matches') }}",
+    venuesUrl: "{{ url_for('.api_venues') }}"
   };
 </script>
 <script src="{{ url_for('static', filename='js/schedulemap.js') }}"></script>
