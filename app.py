@@ -702,15 +702,19 @@ for _edition in editions.EDITIONS.values():
 # Golden Boot tracker) exist on an already-seeded production DB right after a
 # pull + restart, before the updater's first cron run. Idempotent. A brand-new
 # edition DB (no venues yet) gets a first offline seed here, so its pages serve
-# immediately — venues + whatever fixtures its committed snapshot holds (none
-# for the women's 2027 edition until a dataset is published: pre-draw state).
+# immediately; a DB that has venues but an *empty schedule* (deployed while its
+# edition was pre-draw) is also reseeded, so shipping a fixture snapshot — like
+# the women's provisional 2027 dataset (JOE-49) — lights the edition up on the
+# next restart with no manual seeding step. Cheap and offline; a DB that
+# already holds fixtures is never touched.
 with app.app_context():
     for _edition in editions.EDITIONS.values():
         _c = db.connect(_edition.db_path)
         db.init_schema(_c)
         _n_venues = _c.execute('SELECT COUNT(*) FROM venues').fetchone()[0]
+        _n_matches = _c.execute('SELECT COUNT(*) FROM matches').fetchone()[0]
         _c.close()
-        if _n_venues == 0:
+        if _n_venues == 0 or _n_matches == 0:
             seed_data.seed(prefer_remote=False, edition=_edition)
 
 

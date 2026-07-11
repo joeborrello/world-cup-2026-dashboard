@@ -2,9 +2,10 @@
 
 The same blueprint is registered once per edition — the men's 2026 tournament
 keeps the site root, the women's 2027 edition serves under /women — and every
-page carries its own edition's branding. Data seeding / verification is the
-next card: the women's DB here is the pre-draw state (venues, empty schedule),
-which every page and API must survive.
+page carries its own edition's branding. Since JOE-49 the women's DB is seeded
+from the committed provisional snapshot (data/wwc-2027.json), so these tests
+see fixtures under /women; the pre-draw (empty schedule) state that every page
+must survive is covered explicitly by the gating test at the bottom.
 """
 
 import pytest
@@ -77,9 +78,13 @@ def test_editions_read_their_own_databases(client):
     assert len(men) == 16
     assert len(women) == 8
     assert {v["country"] for v in women} == {"Brazil"}
-    # pre-draw: no fixtures yet, and that's a valid served state
-    assert client.get("/women/api/matches").get_json() == []
-    assert client.get("/api/matches").get_json()
+    # each edition serves its own schedule: the men's 104 fixtures at the
+    # root, the 64 provisional women's fixtures (JOE-49) under /women
+    men_matches = client.get("/api/matches").get_json()
+    women_matches = client.get("/women/api/matches").get_json()
+    assert len(men_matches) == 104
+    assert len(women_matches) == 64
+    assert all(m["date"].startswith("2027-") for m in women_matches)
 
 
 # ---------------------------------------------------------------- branding
@@ -110,9 +115,23 @@ def test_edition_switcher_links_the_same_page_in_the_other_edition(client):
     assert "/worldcup/groups" in women_groups
 
 
-def test_pre_draw_note_only_on_the_pre_draw_edition(client):
-    assert "pre-draw-note" in client.get("/women/").get_data(as_text=True)
+def test_pre_draw_note_gates_on_missing_fixtures(client, tmp_path, monkeypatch):
+    """The note shows only while an edition has no fixtures. Both editions now
+    seed a schedule (women's: the JOE-49 provisional snapshot), so neither
+    shows it — but an edition whose draw isn't published yet still must."""
+    assert "pre-draw-note" not in client.get("/women/").get_data(as_text=True)
     assert "pre-draw-note" not in client.get("/").get_data(as_text=True)
+
+    import dataclasses
+    import seed_data
+    pre_draw = dataclasses.replace(
+        editions.WOMEN, db_path=str(tmp_path / "pre-draw.db"),
+        openfootball_local=str(tmp_path / "no-feed.json"))   # no snapshot
+    seed_data.seed(prefer_remote=False, edition=pre_draw)    # venues, 0 matches
+    monkeypatch.setitem(editions.EDITIONS, "women", pre_draw)
+    html = client.get("/women/").get_data(as_text=True)
+    assert "pre-draw-note" in html
+    assert editions.WOMEN.pre_draw_note[:40] in html
 
 
 def test_format_copy_follows_the_edition(client):
