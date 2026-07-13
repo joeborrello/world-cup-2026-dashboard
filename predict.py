@@ -27,6 +27,7 @@ from functools import lru_cache
 import compute
 import config
 import ratings
+import rollback as rollback_mod
 
 
 def _finished_decision(m):
@@ -300,31 +301,44 @@ def _sim_once(group_fixtures, ko, third_slots, R):
 
 
 # ── aggregate many simulations ───────────────────────────────────────────────
-def _aggregate(conn, sims):
+def _aggregate(conn, sims, cutoff=None):
     """Run `sims` Monte-Carlo iterations and return the raw tallies plus per-team
     odds. This step is *independent of any user overrides* (overrides only change
     how the single projected bracket is walked, never the underlying sampling),
     so it is cached and the cheap `_project` step runs on top of it for each
-    interactive what-if edit."""
+    interactive what-if edit.
+
+    `cutoff` (rollback.parse_param output) rolls the tournament back to the end
+    of an earlier matchday before anything is computed: later results are
+    stripped from the working rows, so the sim re-plays them, the dynamic Elo
+    replay stops at the cutoff, and previously-settled matches unlock (JOE-50).
+    """
     group_fixtures = [
         {"num": r["num"], "group": r["group_letter"], "team1": r["team1"],
          "team2": r["team2"], "status": r["status"],
-         "score1": r["score1"], "score2": r["score2"]}
+         "score1": r["score1"], "score2": r["score2"],
+         "date": r["date"], "utc_datetime": r["utc_datetime"]}
         for r in conn.execute(
-            "SELECT num, group_letter, team1, team2, status, score1, score2 "
-            "FROM matches WHERE stage='group' ORDER BY num")
+            "SELECT num, group_letter, team1, team2, status, score1, score2, "
+            "date, utc_datetime FROM matches WHERE stage='group' ORDER BY num")
     ]
     ko = [
         {"num": r["num"], "slot1": r["team1_slot"], "slot2": r["team2_slot"],
          "status": r["status"], "team1": r["team1"], "team2": r["team2"],
          "score1": r["score1"], "score2": r["score2"],
          "pen1": r["pen1"], "pen2": r["pen2"],
+         "date": r["date"], "utc_datetime": r["utc_datetime"],
          "round": ROUND_KEYS.get(r["round_label"])}
         for r in conn.execute(
             "SELECT num, team1_slot, team2_slot, status, team1, team2, "
-            "score1, score2, pen1, pen2, round_label "
+            "score1, score2, pen1, pen2, date, utc_datetime, round_label "
             "FROM matches WHERE stage='knockout' ORDER BY num")
     ]
+    rolled_back = []
+    if cutoff:
+        _, rb1 = rollback_mod.apply(group_fixtures, cutoff)
+        _, rb2 = rollback_mod.apply(ko, cutoff)
+        rolled_back = sorted(rb1 + rb2)
     # best-third "3X/Y" slots only exist in the 48-team format's opening round;
     # matching on the slot text keeps this a no-op for a 32-team edition
     third_slots = []
@@ -342,12 +356,15 @@ def _aggregate(conn, sims):
     # order), then add the host edge. `R` (effective ratings) drives every
     # simulated match and the projected-bracket propagation, so the projection
     # reflects in-tournament form rather than only the pre-tournament snapshot.
+    # Built from the (possibly rolled-back) working rows, NOT a fresh query, so
+    # a rollback also rewinds the form the model has learned — the "real-world
+    # data that updates the simulation models" part of JOE-50.
     prior_elo, prior_hosts = ratings.db_priors(conn)
-    finished = conn.execute(
-        "SELECT team1, team2, score1, score2 FROM matches "
-        "WHERE status='finished' AND score1 IS NOT NULL "
-        "AND team1 IS NOT NULL AND team2 IS NOT NULL "
-        "ORDER BY utc_datetime, num").fetchall()
+    finished = sorted(
+        (m for m in group_fixtures + ko
+         if m["status"] == "finished" and m["score1"] is not None
+         and m["team1"] and m["team2"]),
+        key=lambda m: (m["utc_datetime"] or "", m["num"]))
     base = ratings.dynamic_ratings(finished, elo=prior_elo, hosts=prior_hosts)
     R = {t: base.get(t, ratings.DEFAULT_ELO) + (ratings.HOST_BONUS if t in prior_hosts else 0)
          for t in team_group}
@@ -410,6 +427,7 @@ def _aggregate(conn, sims):
         "sims": sims, "n_finished": n_fin,
         "generated": datetime.now(timezone.utc).isoformat(),
         "teams": teams_out,
+        "rollback": cutoff, "rolled_back": rolled_back,
         # internals consumed by _project (Python objects; never serialized as-is)
         "_R": R, "_rank_counts": rank_counts, "_slot_counts": slot_counts,
         "_group_teams": group_teams, "_third_slots": third_slots, "_ko": ko,
@@ -551,7 +569,9 @@ def _norm_overrides(overrides):
 # aggregate — a single shared slot would make alternating requests for the two
 # tournaments evict each other's sims on every swap.
 _lock = threading.Lock()
-_cache = {}                       # db path -> {"key": ..., "agg": ...}
+_cache = {}          # (db path, key) -> agg; small FIFO so each edition's live
+                     # view and a few rollback views stay warm side by side
+_CACHE_MAX = 8
 
 
 def _db_file(conn):
@@ -559,43 +579,50 @@ def _db_file(conn):
     return conn.execute("PRAGMA database_list").fetchone()[2] or ":memory:"
 
 
-def _aggregate_cached(conn, sims, seed):
+def _aggregate_cached(conn, sims, seed, cutoff=None):
     # Key on a signature of the actual finished RESULTS, not merely how many are
     # finished. A knockout whose result is *corrected in place* — a wrong winner
     # fixed, or a penalty shootout back-filled (JOE-16) — leaves the finished
     # COUNT unchanged, so a count-only key let a long-running gunicorn keep
     # serving the stale projected bracket (e.g. Germany still shown advancing past
     # Paraguay) until the next restart. Summing the scoreline + penalties makes
-    # any result change bust the cache.
+    # any result change bust the cache. The rollback cutoff is part of the key
+    # (each cutoff is a distinct simulated world); a handful of entries are kept
+    # so sliding between rollback points doesn't evict the live aggregate.
     sig = conn.execute(
         "SELECT COUNT(*), COALESCE(SUM("
         "  num * 1000003"
         "  + COALESCE(score1, 0) * 1009 + COALESCE(score2, 0) * 911"
         "  + COALESCE(pen1, 0) * 53 + COALESCE(pen2, 0) * 31), 0) "
         "FROM matches WHERE status='finished'").fetchone()
-    key = (sig[0], sig[1], sims, seed)
-    slot = _db_file(conn)
+    key = (_db_file(conn), sig[0], sig[1], sims, seed, cutoff)
     with _lock:
-        ent = _cache.get(slot)
-        if ent and ent["key"] == key and ent["agg"] is not None:
-            return ent["agg"]
+        if key in _cache:
+            return _cache[key]
     if seed is not None:
         random.seed(seed)
-    agg = _aggregate(conn, sims)
+    agg = _aggregate(conn, sims, cutoff)
     with _lock:
-        _cache[slot] = {"key": key, "agg": agg}
+        while len(_cache) >= _CACHE_MAX:
+            _cache.pop(next(iter(_cache)))       # evict oldest inserted
+        _cache[key] = agg
     return agg
 
 
-def predictions(conn, sims=None, seed=None):
-    """Per-team odds + the default (un-manipulated) projected bracket."""
+def predictions(conn, sims=None, seed=None, rollback=None):
+    """Per-team odds + the default (un-manipulated) projected bracket.
+
+    `rollback` (a rollback.parse_param cutoff) re-forecasts the tournament as it
+    stood at the end of that matchday — later results and the Elo form they fed
+    into the model are unwound before simulating."""
     sims = sims or SIMS
     if seed is None:
         seed = SEED                         # shared default -> deterministic odds
-    agg = _aggregate_cached(conn, sims, seed)
+    agg = _aggregate_cached(conn, sims, seed, rollback)
     slots, _ = _project(agg, {})
     return {"sims": agg["sims"], "n_finished": agg["n_finished"],
-            "generated": agg["generated"], "teams": agg["teams"], "slots": slots}
+            "generated": agg["generated"], "teams": agg["teams"], "slots": slots,
+            "rollback": agg["rollback"], "rolled_back": agg["rolled_back"]}
 
 
 def slot_candidates(conn, top=3, sims=None, seed=None):
@@ -624,17 +651,23 @@ def slot_candidates(conn, top=3, sims=None, seed=None):
     return out
 
 
-def projected_bracket(conn, overrides=None, sims=None, seed=None):
+def projected_bracket(conn, overrides=None, sims=None, seed=None, rollback=None):
     """Projected bracket honoring user `overrides` ({match_num: forced_winner}).
 
     Reuses the cached Monte-Carlo aggregate, so each what-if edit re-derives the
     bracket deterministically and instantly. `overrides` that don't take effect
     (the forced team isn't in that match) are dropped from the returned
-    `overrides` so the client can stay in sync."""
+    `overrides` so the client can stay in sync.
+
+    `rollback` (a rollback.parse_param cutoff) rewinds the bracket to the end of
+    an earlier matchday first: rolled-back matches unlock (become steerable
+    again) and the whole tree re-projects from the surviving results; the
+    stripped match numbers come back as `rolled_back` for the client."""
     sims = sims or SIMS
     if seed is None:
         seed = SEED                         # shared default -> deterministic odds
-    agg = _aggregate_cached(conn, sims, seed)
+    agg = _aggregate_cached(conn, sims, seed, rollback)
     slots, applied = _project(agg, _norm_overrides(overrides))
     return {"sims": agg["sims"], "n_finished": agg["n_finished"],
-            "generated": agg["generated"], "slots": slots, "overrides": applied}
+            "generated": agg["generated"], "slots": slots, "overrides": applied,
+            "rollback": agg["rollback"], "rolled_back": agg["rolled_back"]}

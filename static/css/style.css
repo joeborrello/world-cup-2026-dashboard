@@ -544,6 +544,19 @@ code { background: #eef2f0; padding: .05rem .35rem; border-radius: 4px; font-siz
 .pick-reset:disabled { opacity: .45; cursor: default; }
 .pick-hint { margin: .1rem 0 .4rem; }
 
+/* ── bracket roll-back (JOE-50) ──────────────────────────────────────────────
+   A rolled-back match had a real result that is being rewound and re-forecast:
+   dashed amber outline + an ↩ marker on the match number so it reads as "this
+   really happened, but we're pretending it hasn't yet". Rewound group rails get
+   the same treatment. */
+.rollback-wrap select { max-width: 160px; }
+.bmatch.rolled-back { border: 1px dashed var(--third); }
+.bmatch.finished.rolled-back { border-left: 3px dashed var(--third); }
+.bmatch.rolled-back .bm-no::after { content: " ↩"; color: #9a7b1e; font-size: .7rem; }
+.mini-group.rolled-back { border: 1px dashed var(--third); }
+.mini-group.rolled-back caption::after { content: " · rolled back ↩"; font-weight: 600;
+  font-size: .64rem; color: var(--gold); }
+
 /* ── predictions page ──────────────────────────────────── */
 .pred-meta { color: var(--muted); font-size: .85rem; margin: .2rem 0 1rem; }
 .odds-wrap { overflow-x: auto; }

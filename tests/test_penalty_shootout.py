@@ -428,7 +428,8 @@ def test_projection_cache_busts_when_a_shootout_is_backfilled_in_place(monkeypat
     calls = {"n": 0}
     monkeypatch.setattr(
         predict, "_aggregate",
-        lambda c, sims: (calls.__setitem__("n", calls["n"] + 1) or {"agg": calls["n"]}))
+        lambda c, sims, cutoff=None: (
+            calls.__setitem__("n", calls["n"] + 1) or {"agg": calls["n"]}))
     predict._cache.clear()
     try:
         before = n_finished()
@@ -503,7 +504,8 @@ def test_projection_cache_holds_when_nothing_changed(monkeypatch):
     calls = {"n": 0}
     monkeypatch.setattr(
         predict, "_aggregate",
-        lambda c, sims: (calls.__setitem__("n", calls["n"] + 1) or {"agg": calls["n"]}))
+        lambda c, sims, cutoff=None: (
+            calls.__setitem__("n", calls["n"] + 1) or {"agg": calls["n"]}))
     predict._cache.clear()
     try:
         predict._aggregate_cached(conn, sims=50, seed=1)
