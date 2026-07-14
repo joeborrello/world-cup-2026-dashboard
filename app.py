@@ -1,8 +1,12 @@
 """
-2026 World Cup dashboard — Flask application.
+World Cup dashboard — Flask application.
 
-Serves three views (bracket, groups, daily map) plus a small JSON API that the
-map's day-slider calls. All data comes from data/worldcup.db, built by
+Serves every view (today, groups, bracket, predictions, maps, Golden Boot,
+what-if) plus the JSON API behind them — once per tournament *edition*. All
+routes live on a single blueprint that is registered once per edition
+(the men's 2026 tournament at the site root, the 2027 Women's World Cup under
+/women); the edition is resolved from the request's blueprint name, and all
+data comes from that edition's own SQLite DB (see editions.py), built by
 seed_data.py and refreshed by update_results.py.
 """
 
@@ -10,20 +14,23 @@ import json
 import os
 import re
 import time
-from datetime import date, datetime, timedelta
+from datetime import datetime
 
-from flask import Flask, jsonify, render_template, request
+from flask import Blueprint, Flask, jsonify, render_template, request, url_for
+from werkzeug.routing import BuildError
 
 import alerts
 import compute
 import config
 import db
+import editions
 import goldenboot
 import live
 import predict
 import publish_pages
 import pundits
 import scenarios
+import seed_data
 import weather
 from flags import flag, flag_code
 
@@ -50,13 +57,57 @@ app.config['PREFERRED_URL_SCHEME'] = 'https'
 app.wsgi_app = SubpathMiddleware(app.wsgi_app)
 app.jinja_env.filters['flag'] = flag
 
-# Apply the schema on startup so newly-added tables (e.g. `scorers` for the
-# Golden Boot tracker) exist on an already-seeded production DB right after a
-# pull + restart, before the updater's first cron run. Idempotent.
-with app.app_context():
-    _c = db.connect()
-    db.init_schema(_c)
-    _c.close()
+bp = Blueprint('edition', __name__)
+
+
+def _ed():
+    """The Edition serving this request (from the registered blueprint name)."""
+    return editions.get(request.blueprint)
+
+
+def _conn():
+    """Open this request's edition database."""
+    return db.connect(_ed().db_path)
+
+
+@bp.context_processor
+def _edition_context():
+    """Everything base.html needs to brand a page for its edition.
+
+    * edition       — the Edition object (title, footer, flags, blurbs, ...)
+    * edition_tabs  — the switcher: same page in every edition, current marked
+    * pre_draw      — True while this edition has no fixtures published yet
+    * opening_round / n_thirds — the tournament format as the DATA describes it
+      (falling back to the edition's format defaults pre-draw), so copy like
+      "best 8 third-placed teams advance to the Round of 32" adapts to a
+      32-team bracket that starts at the Round of 16 with no wildcard slots.
+    """
+    ed = _ed()
+    suffix = (request.endpoint or '.index').split('.', 1)[-1]
+    tabs = []
+    for other in editions.EDITIONS.values():
+        try:
+            href = url_for(f'{other.key}.{suffix}')
+        except BuildError:
+            href = url_for(f'{other.key}.index')
+        tabs.append({'edition': other, 'href': href,
+                     'current': other.key == ed.key})
+
+    conn = _conn()
+    n_matches = conn.execute('SELECT COUNT(*) FROM matches').fetchone()[0]
+    opening = conn.execute(
+        "SELECT round_label FROM matches WHERE stage='knockout' "
+        'ORDER BY num LIMIT 1').fetchone()
+    n_thirds = (compute.count_third_place_slots(conn) if n_matches else None)
+    conn.close()
+    return {
+        'edition': ed,
+        'edition_tabs': tabs,
+        'pre_draw': n_matches == 0 and bool(ed.pre_draw_note),
+        'opening_round': opening['round_label'] if opening else ed.opening_round,
+        'n_thirds': n_thirds if n_thirds is not None
+                    else (8 if ed.key == 'men' else 0),
+    }
 
 
 # Cache-bust every static asset by its file mtime, so a deploy that ships a new
@@ -154,9 +205,9 @@ def _standings_by_group(conn):
 
 # ── page routes ────────────────────────────────────────────────────────────
 
-@app.route('/')
+@bp.route('/')
 def index():
-    conn = db.connect()
+    conn = _conn()
     venues = _venues_map(conn)
     # Send the whole schedule; the page picks "today" (and the next match day) in
     # the VIEWER's device timezone from each match's UTC kickoff, so the grouping
@@ -167,21 +218,16 @@ def index():
     n_finished = conn.execute(
         "SELECT COUNT(*) FROM matches WHERE status='finished'").fetchone()[0]
     conn.close()
-    return render_template('index.html', matches=matches, n_finished=n_finished)
+    return render_template('index.html', matches=matches,
+                           n_finished=n_finished, n_total=len(matches))
 
 
-@app.route('/groups')
+@bp.route('/groups')
 def groups():
-    conn = db.connect()
+    conn = _conn()
     groups_data = _standings_by_group(conn)
     conn.close()
     return render_template('groups.html', groups=groups_data)
-
-
-# Group rail order: each group's WINNER (1X) feeds exactly one R32 match; this
-# orders the 12 group tables top→bottom to roughly track the R32 column, so the
-# connector lines from groups into the bracket stay as untangled as possible.
-GROUP_RAIL_ORDER = ['E', 'F', 'C', 'I', 'A', 'L', 'D', 'G', 'H', 'B', 'J', 'K']
 
 
 def _slot_group(slot):
@@ -203,9 +249,9 @@ def _slot_source(slot):
     return int(m.group(1)) if m else None
 
 
-@app.route('/bracket')
+@bp.route('/bracket')
 def bracket():
-    conn = db.connect()
+    conn = _conn()
     venues = _venues_map(conn)
     ko_rows = conn.execute(
         "SELECT * FROM matches WHERE stage='knockout' ORDER BY num"
@@ -214,19 +260,19 @@ def bracket():
     group_feeds = {}  # letter -> {'1': num, '2': num, '3': [nums]}
     for row in ko_rows:
         m = _match_dict(row, venues)
-        # concrete feeder groups (for R32 lines into the group rail)
+        # concrete feeder groups (for opening-round lines into the group rail)
         groups = [g for g in (_slot_group(row['team1_slot']),
                               _slot_group(row['team2_slot'])) if g]
         wilds = sorted(set(_slot_wildcards(row['team1_slot'])
                            + _slot_wildcards(row['team2_slot'])))
-        # source matches (for R16+ lines back to the previous round)
+        # source matches (for later-round lines back to the previous round)
         srcs = [s for s in (_slot_source(row['team1_slot']),
                             _slot_source(row['team2_slot'])) if s]
         m['feeder_groups'] = groups
         m['wildcards'] = wilds
         m['sources'] = srcs
         by_round.setdefault(row['round_label'], []).append(m)
-        # record where each group's finishers go (R32 only)
+        # record where each group's finishers go (opening round only)
         for slot in (row['team1_slot'], row['team2_slot']):
             g = _slot_group(slot)
             if g:
@@ -292,7 +338,8 @@ def bracket():
                 (left if m['num'] in left_nums else right)[key].append(m)
 
         # Each group's winner & runner-up land in opposite halves, so the group
-        # table appears on both rails — beside the R32 match it feeds on that side.
+        # table appears on both rails — beside the opening-round match it feeds
+        # on that side.
         for letter in sorted(group_feeds):
             gf = group_feeds[letter]
             rows = standings.get(letter, [])
@@ -312,39 +359,44 @@ def bracket():
                            left_rail=left_rail, right_rail=right_rail)
 
 
-@app.route('/map')
+@bp.route('/map')
 def map_view():
-    return render_template('map.html', start=config.TOURNAMENT_START,
-                           end=config.TOURNAMENT_END,
+    ed = _ed()
+    return render_template('map.html', start=ed.start, end=ed.end,
                            owm_key=config.OPENWEATHER_API_KEY)
 
 
-@app.route('/schedule-map')
+@bp.route('/schedule-map')
 def schedule_map():
-    return render_template('schedulemap.html', start=config.TOURNAMENT_START,
-                           end=config.TOURNAMENT_END)
+    ed = _ed()
+    conn = _conn()
+    n_matches = conn.execute('SELECT COUNT(*) FROM matches').fetchone()[0]
+    n_venues = conn.execute('SELECT COUNT(*) FROM venues').fetchone()[0]
+    conn.close()
+    return render_template('schedulemap.html', start=ed.start, end=ed.end,
+                           n_matches=n_matches, n_venues=n_venues)
 
 
-@app.route('/team-map')
+@bp.route('/team-map')
 def team_map():
-    return render_template('teammap.html', start=config.TOURNAMENT_START,
-                           end=config.TOURNAMENT_END)
+    ed = _ed()
+    return render_template('teammap.html', start=ed.start, end=ed.end)
 
 
 # ── JSON API ───────────────────────────────────────────────────────────────
 
-@app.route('/api/venues')
+@bp.route('/api/venues')
 def api_venues():
-    conn = db.connect()
+    conn = _conn()
     venues = [dict(v) for v in conn.execute("SELECT * FROM venues")]
     conn.close()
     return jsonify(venues)
 
 
-@app.route('/api/teams')
+@bp.route('/api/teams')
 def api_teams():
-    """All 48 teams with flag code and group letter, for the follow-a-team picker."""
-    conn = db.connect()
+    """All teams with flag code and group letter, for the follow-a-team picker."""
+    conn = _conn()
     rows = conn.execute(
         "SELECT name, group_letter FROM teams ORDER BY group_letter, name").fetchall()
     conn.close()
@@ -354,9 +406,9 @@ def api_teams():
     ])
 
 
-@app.route('/api/matches')
+@bp.route('/api/matches')
 def api_matches():
-    conn = db.connect()
+    conn = _conn()
     venues = _venues_map(conn)
     d = request.args.get('date')
     if d:
@@ -372,7 +424,7 @@ def api_matches():
     return jsonify(out)
 
 
-@app.route('/api/weather')
+@bp.route('/api/weather')
 def api_weather():
     """Per-match kickoff weather (forecast / current / historical).
 
@@ -386,63 +438,69 @@ def api_weather():
             tok = tok.strip()
             if tok.isdigit():
                 wanted.append(int(tok))
-        conn = db.connect()
+        conn = _conn()
         data = weather.weather_for_nums(conn, wanted)
         conn.close()
         return jsonify(data)
     d = request.args.get('date')
     if not d:
         return jsonify({})
-    conn = db.connect()
+    conn = _conn()
     data = weather.weather_for_date(conn, d)
     conn.close()
     return jsonify(data)
 
 
-@app.route('/api/alerts')
+@bp.route('/api/alerts')
 def api_alerts():
     """Live weather advisories near the host venues (GeoJSON)."""
-    conn = db.connect()
-    fc = alerts.active_alerts(conn)
+    ed = _ed()
+    conn = _conn()
+    fc = alerts.active_alerts(conn, key=ed.key)
     conn.close()
     return jsonify(fc)
 
 
-@app.route('/api/live')
+@bp.route('/api/live')
 def api_live():
     """Matches currently in play (live score + state), for the site-wide ticker."""
-    conn = db.connect()
-    data = live.live_matches(conn)
+    ed = _ed()
+    conn = _conn()
+    data = live.live_matches(conn, url=ed.football_data_url, key=ed.key)
     conn.close()
     return jsonify({'matches': data, 'now': datetime.utcnow().isoformat() + 'Z',
-                    'checked_at': live.last_checked()})
+                    'checked_at': live.last_checked(ed.key)})
 
 
 # Title odds come from a Monte-Carlo sim that's too costly to run per request, so
-# cache them briefly; phase + today's matches are cheap SQL and stay fresh.
-_LANDING_ODDS = {'odds': None, 'ts': 0.0}
+# cache them briefly (per edition); phase + today's matches are cheap SQL and
+# stay fresh.
+_LANDING_ODDS = {}
 _LANDING_ODDS_TTL = 600  # seconds
 
 
-def _landing_title_odds(conn):
+def _landing_title_odds(conn, key):
+    slot = _LANDING_ODDS.setdefault(key, {'odds': None, 'ts': 0.0})
     now = time.time()
-    if _LANDING_ODDS['odds'] is None or now - _LANDING_ODDS['ts'] > _LANDING_ODDS_TTL:
-        _LANDING_ODDS['odds'] = publish_pages._title_odds(conn)
-        _LANDING_ODDS['ts'] = now
-    return _LANDING_ODDS['odds']
+    if slot['odds'] is None or now - slot['ts'] > _LANDING_ODDS_TTL:
+        slot['odds'] = publish_pages._title_odds(conn)
+        slot['ts'] = now
+    return slot['odds']
 
 
-@app.route('/api/landing')
+@bp.route('/api/landing')
 def api_landing():
     """Live landing-page payload for the GitHub Pages site: current phase, today's
     matches (with live scores), and cached title odds. CORS-open so the .io page
     can poll the droplet directly instead of reading a git-committed snapshot."""
-    conn = db.connect()
+    ed = _ed()
+    conn = _conn()
     payload = {
         'phase': publish_pages._phase(conn),
         'today': publish_pages._today(conn),
-        'title_odds': _landing_title_odds(conn),
-        'live_url': 'https://droplet.josephborrello.com/worldcup/',
+        'title_odds': _landing_title_odds(conn, ed.key),
+        'live_url': 'https://droplet.josephborrello.com/worldcup'
+                    + ed.url_prefix + '/',
         'generated': datetime.utcnow().isoformat() + 'Z',
     }
     conn.close()
@@ -452,10 +510,10 @@ def api_landing():
     return resp
 
 
-@app.route('/api/days')
+@bp.route('/api/days')
 def api_days():
     """All tournament dates that have at least one match, with counts."""
-    conn = db.connect()
+    conn = _conn()
     rows = conn.execute(
         "SELECT date, COUNT(*) n FROM matches GROUP BY date ORDER BY date"
     ).fetchall()
@@ -463,17 +521,17 @@ def api_days():
     return jsonify([{'date': r['date'], 'count': r['n']} for r in rows])
 
 
-@app.route('/api/standings')
+@bp.route('/api/standings')
 def api_standings():
-    conn = db.connect()
+    conn = _conn()
     data = _standings_by_group(conn)
     conn.close()
     return jsonify(data)
 
 
-@app.route('/api/bracket')
+@bp.route('/api/bracket')
 def api_bracket():
-    conn = db.connect()
+    conn = _conn()
     venues = _venues_map(conn)
     rows = conn.execute(
         "SELECT * FROM matches WHERE stage='knockout' ORDER BY num").fetchall()
@@ -493,9 +551,9 @@ def _depth_rounds(depth):
     return allowed
 
 
-@app.route('/api/predictions')
+@bp.route('/api/predictions')
 def api_predictions():
-    conn = db.connect()
+    conn = _conn()
     data = predict.predictions(conn)
     conn.close()
     # per-team odds + flag code + meta (projected slots live on /api/bracket/predicted)
@@ -525,7 +583,7 @@ def _parse_overrides(raw):
     return out
 
 
-@app.route('/api/bracket/predicted')
+@bp.route('/api/bracket/predicted')
 def api_bracket_predicted():
     """Projected (most-likely) team per knockout slot, up to a chosen depth.
 
@@ -537,7 +595,7 @@ def api_bracket_predicted():
     depth = request.args.get('depth', 'final')
     allowed = _depth_rounds(depth)
     overrides = _parse_overrides(request.args.get('overrides'))
-    conn = db.connect()
+    conn = _conn()
     data = predict.projected_bracket(conn, overrides)
     conn.close()
 
@@ -551,56 +609,57 @@ def api_bracket_predicted():
                     'overrides': data['overrides']})
 
 
-@app.route('/api/pundits')
+@bp.route('/api/pundits')
 def api_pundits():
     """MiroFish-inspired AI pundit panel for a scope ('group:A' | 'knockout')."""
     scope = request.args.get('scope', 'knockout')
-    conn = db.connect()
-    data = pundits.panel(conn, scope)
+    ed = _ed()
+    conn = _conn()
+    data = pundits.panel(conn, scope, tournament=ed.prompt_name)
     conn.close()
     return jsonify(data)
 
 
-@app.route('/api/pundits/budget')
+@bp.route('/api/pundits/budget')
 def api_pundits_budget():
     """Current pundit usage vs. the daily cap and monthly $ budget."""
-    conn = db.connect()
+    conn = _conn()
     bs = pundits.budget_status(conn)
     conn.close()
     bs['enabled'] = pundits.available()
     return jsonify(bs)
 
 
-@app.route('/api/scenarios', methods=['POST'])
+@bp.route('/api/scenarios', methods=['POST'])
 def api_scenarios():
     """MiroFish-style free-form what-if: question in, cached map or a pending
     envelope out. Generation runs in the background — a claude CLI call can
     outlive the reverse proxy's read timeout, so the answer is never awaited
     in-request; the page polls /api/scenarios/status instead."""
     body = request.get_json(silent=True) or {}
-    conn = db.connect()
-    data = scenarios.ask(conn, body.get('question', ''))
+    conn = _conn()
+    data = scenarios.ask(conn, body.get('question', ''), edition=_ed())
     conn.close()
     status = 400 if data.get('error') == 'bad_question' else 200
     return jsonify(data), status
 
 
-@app.route('/api/scenarios/status')
+@bp.route('/api/scenarios/status')
 def api_scenarios_status():
     """Poll for the answer to a question already POSTed to /api/scenarios."""
-    conn = db.connect()
-    data = scenarios.poll(conn, request.args.get('question', ''))
+    conn = _conn()
+    data = scenarios.poll(conn, request.args.get('question', ''), edition=_ed())
     conn.close()
     status = 400 if data.get('error') == 'bad_question' else 200
     return jsonify(data), status
 
 
-@app.route('/what-if')
+@bp.route('/what-if')
 def what_if_page():
     return render_template('whatif.html')
 
 
-@app.route('/predictions')
+@bp.route('/predictions')
 def predictions_page():
     return render_template('predictions.html')
 
@@ -614,21 +673,45 @@ def _golden_boot_payload(conn):
     return data
 
 
-@app.route('/golden-boot')
+@bp.route('/golden-boot')
 def golden_boot_page():
-    conn = db.connect()
+    conn = _conn()
     data = _golden_boot_payload(conn)
     conn.close()
     return render_template('goldenboot.html', gb=data)
 
 
-@app.route('/api/golden-boot')
+@bp.route('/api/golden-boot')
 def api_golden_boot():
     """Golden Boot leaderboard + remaining-goals projection (JSON)."""
-    conn = db.connect()
+    conn = _conn()
     data = _golden_boot_payload(conn)
     conn.close()
     return jsonify(data)
+
+
+# One blueprint, one registration per edition: the men's 2026 tournament keeps
+# the site root (all historical URLs unchanged), the women's 2027 edition mounts
+# under /women. request.blueprint tells every route which edition it serves.
+for _edition in editions.EDITIONS.values():
+    app.register_blueprint(bp, name=_edition.key,
+                           url_prefix=_edition.url_prefix or None)
+
+
+# Apply the schema on startup so newly-added tables (e.g. `scorers` for the
+# Golden Boot tracker) exist on an already-seeded production DB right after a
+# pull + restart, before the updater's first cron run. Idempotent. A brand-new
+# edition DB (no venues yet) gets a first offline seed here, so its pages serve
+# immediately — venues + whatever fixtures its committed snapshot holds (none
+# for the women's 2027 edition until a dataset is published: pre-draw state).
+with app.app_context():
+    for _edition in editions.EDITIONS.values():
+        _c = db.connect(_edition.db_path)
+        db.init_schema(_c)
+        _n_venues = _c.execute('SELECT COUNT(*) FROM venues').fetchone()[0]
+        _c.close()
+        if _n_venues == 0:
+            seed_data.seed(prefer_remote=False, edition=_edition)
 
 
 if __name__ == '__main__':

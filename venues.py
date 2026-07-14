@@ -1,5 +1,6 @@
 """
-Static venue table for the 16 host stadiums of the 2026 World Cup.
+Static venue tables: the 16 host stadiums of the men's 2026 World Cup and the
+8 host stadiums of the 2027 Women's World Cup (Brazil).
 
 Keyed by the openfootball "ground" string so seed_data.py can join match
 fixtures to coordinates. openfootball does not ship lat/lng, and these venues
@@ -95,5 +96,52 @@ VENUES = {
         "stadium": "BC Place", "city": "Vancouver",
         "country": "Canada", "lat": 49.2768, "lng": -123.1118,
         "tz": "America/Vancouver", "roof": "retractable",
+    },
+}
+
+# 2027 Women's World Cup (Brazil) — the eight host stadiums. Keyed by city the
+# way openfootball grounds its Brazilian fixtures; if the eventual 2027 feed
+# spells a ground differently, seed_data's unmapped-venue check will name it
+# loudly and the key just needs renaming here. Every pitch is open-air.
+WOMENS_VENUES = {
+    "Rio de Janeiro": {
+        "stadium": "Estádio do Maracanã", "city": "Rio de Janeiro",
+        "country": "Brazil", "lat": -22.9121, "lng": -43.2302,
+        "tz": "America/Sao_Paulo", "roof": "open",
+    },
+    "São Paulo": {
+        "stadium": "Neo Química Arena", "city": "São Paulo",
+        "country": "Brazil", "lat": -23.5453, "lng": -46.4742,
+        "tz": "America/Sao_Paulo", "roof": "open",
+    },
+    "Brasília": {
+        "stadium": "Estádio Nacional Mané Garrincha", "city": "Brasília",
+        "country": "Brazil", "lat": -15.7835, "lng": -47.8992,
+        "tz": "America/Sao_Paulo", "roof": "open",
+    },
+    "Belo Horizonte": {
+        "stadium": "Estádio Mineirão", "city": "Belo Horizonte",
+        "country": "Brazil", "lat": -19.8658, "lng": -43.9719,
+        "tz": "America/Sao_Paulo", "roof": "open",
+    },
+    "Fortaleza": {
+        "stadium": "Arena Castelão", "city": "Fortaleza",
+        "country": "Brazil", "lat": -3.8072, "lng": -38.5222,
+        "tz": "America/Fortaleza", "roof": "open",
+    },
+    "Recife (São Lourenço da Mata)": {
+        "stadium": "Arena de Pernambuco", "city": "Recife",
+        "country": "Brazil", "lat": -8.0405, "lng": -35.0080,
+        "tz": "America/Recife", "roof": "open",
+    },
+    "Salvador": {
+        "stadium": "Arena Fonte Nova", "city": "Salvador",
+        "country": "Brazil", "lat": -12.9787, "lng": -38.5044,
+        "tz": "America/Bahia", "roof": "open",
+    },
+    "Porto Alegre": {
+        "stadium": "Estádio Beira-Rio", "city": "Porto Alegre",
+        "country": "Brazil", "lat": -30.0654, "lng": -51.2358,
+        "tz": "America/Sao_Paulo", "roof": "open",
     },
 }

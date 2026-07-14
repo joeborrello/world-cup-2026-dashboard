@@ -1,11 +1,11 @@
 """Tournament editions served by this dashboard.
 
-Everything edition-specific — database file, data feeds, tournament dates,
-venues, Elo priors, branding — lives on an Edition object instead of on
-module-level 2026 constants, so the backend (db.py, seed_data.py, and
-eventually the routes) can serve more than one World Cup from one codebase.
-The men's 2026 tournament is currently the only registered edition; the 2027
-Women's World Cup joins the registry once its data and routes land.
+The site tracks more than one World Cup: the men's 2026 tournament (the
+original, at the site root) and the 2027 Women's World Cup in Brazil (under
+/women). Everything edition-specific — database file, data feeds, dates,
+venues, Elo priors, branding — lives on an Edition object; app.py registers
+the same blueprint once per edition and resolves the right Edition from the
+request, so every feature is carried by both tournaments from one codebase.
 
 The engine itself (compute.py / predict.py) stays *format*-agnostic by reading
 the tournament's shape from the data (round labels, wildcard slots) rather than
@@ -98,7 +98,50 @@ MEN = Edition(
     og_image='og/preview.png',
 )
 
-EDITIONS = {e.key: e for e in (MEN,)}
+WOMEN = Edition(
+    key='women',
+    title="Women's World Cup 2027",
+    nav_label="Women's 2027",
+    hosts_flags='🇧🇷',
+    og_description=(
+        "Follow the 2027 FIFA Women's World Cup in Brazil — group tables, a "
+        'live bracket, interactive maps of the eight host cities, match-day '
+        'weather, a Golden Boot tracker, and an Elo prediction engine.'),
+    footer=('Jun 24 – Jul 25, 2027 · 32 teams · 8 cities · 64 matches · '
+            'times shown in your local timezone'),
+    db_path=os.path.join(config.DATA_DIR, 'worldcup-womens.db'),
+    # openfootball has not published a 2027 Women's World Cup dataset yet; set
+    # this env var (or edit here) the moment one exists and the updater/seeder
+    # will start syncing fixtures + results exactly like the men's edition.
+    openfootball_url=os.environ.get('OPENFOOTBALL_WOMENS_URL', ''),
+    openfootball_local=os.path.join(config.DATA_DIR, 'wwc-2027.json'),
+    football_data_url=os.environ.get('FOOTBALL_DATA_WOMENS_URL', ''),
+    start='2027-06-24',
+    end='2027-07-25',
+    # All eight Brazilian host cities sit on UTC-3 (no DST since 2019).
+    today_tz=os.environ.get('TOURNAMENT_TZ_WOMENS', 'America/Sao_Paulo'),
+    venues=venues.WOMENS_VENUES,
+    elo=ratings.WOMENS_ELO,
+    url_prefix='/women',
+    prompt_name="the 2027 FIFA Women's World Cup",
+    region='Brazil',
+    opening_round='Round of 16',
+    groups_blurb='All 8 group standings, live.',
+    bracket_blurb='Round of 16 → Final, with feeder groups.',
+    cities_blurb='Every fixture mapped across the 8 host cities.',
+    whatif_placeholder='e.g. What happens to Group C if Germany lose their last group match?',
+    whatif_examples=(
+        'What if the USA lose in the Round of 16?',
+        'Who benefits most if the top seed in Group A gets upset?',
+        'What does the final look like if both semi-final favourites fall?'),
+    elo_hosts=frozenset(ratings.WOMENS_HOSTS),
+    pre_draw_note=(
+        'The final draw has not been made yet — qualification runs through '
+        'early 2027. Fixtures, groups, predictions and the bracket light up '
+        'automatically as soon as the schedule is published.'),
+)
+
+EDITIONS = {e.key: e for e in (MEN, WOMEN)}
 DEFAULT = MEN
 
 
