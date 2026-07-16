@@ -78,6 +78,11 @@
         <option value="final" selected>Final</option>
       </select>
     </label>
+    <label class="depth-wrap rollback-wrap" title="Re-forecast the tournament as it stood at the end of an earlier matchday — every later real result (and the form it taught the model) is rolled back.">roll back to
+      <select id="rollbackSel" disabled>
+        <option value="" selected>Live — all results</option>
+      </select>
+    </label>
     <button type="button" id="resetPicks" class="pick-reset" disabled>Reset picks</button>
     <a class="pred-link" href="{{ url_for('.predictions_page') }}">Full odds →</a>
     <button type="button" class="meth-btn" data-modal-open="methodologyModal">
@@ -101,7 +106,11 @@
   Click again to undo, or use <b>Reset picks</b> to clear all. <b>Tip:</b> picking an
   <i>underdog</i> (a team that wasn't already projected to win) is what visibly shifts the later
   rounds — picking the favourite just locks in what the model already expected. Zoom in for
-  bigger boxes. (Teams already decided on the pitch can't be changed.)</span></p>
+  bigger boxes. (Teams already decided on the pitch can't be changed.)
+  <b>Roll back time:</b> the <b>roll back to</b> picker rewinds the bracket to the end of an
+  earlier matchday — every later real result is unwound (the group tables and the form the
+  model has learned roll back with it) and the tournament is re-forecast from that point.
+  Rolled-back matches get a dashed amber outline and become pickable again.</span></p>
 <p class="pick-status" id="pickStatus" role="status" aria-live="polite" hidden></p>
 
 <div class="bracket-viewport" id="bviewport">
@@ -145,6 +154,7 @@
 {% endblock %}
 
 {% block scripts %}
-<script>window.WC = { bracketPredUrl: "{{ url_for('.api_bracket_predicted') }}" };</script>
+<script>window.WC = { bracketPredUrl: "{{ url_for('.api_bracket_predicted') }}",
+                     rollbackPointsUrl: "{{ url_for('.api_rollback_points') }}" };</script>
 <script src="{{ url_for('static', filename='js/bracket.js') }}"></script>
 {% endblock %}

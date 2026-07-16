@@ -29,6 +29,7 @@ import live
 import predict
 import publish_pages
 import pundits
+import rollback
 import scenarios
 import seed_data
 import weather
@@ -554,12 +555,14 @@ def _depth_rounds(depth):
 @bp.route('/api/predictions')
 def api_predictions():
     conn = _conn()
-    data = predict.predictions(conn)
+    cutoff = rollback.parse_param(request.args.get('rollback'))
+    data = predict.predictions(conn, rollback=cutoff)
     conn.close()
     # per-team odds + flag code + meta (projected slots live on /api/bracket/predicted)
     teams = {t: {**v, 'code': flag_code(t)} for t, v in data['teams'].items()}
     return jsonify({'sims': data['sims'], 'n_finished': data['n_finished'],
-                    'generated': data['generated'], 'teams': teams})
+                    'generated': data['generated'], 'teams': teams,
+                    'rollback': data['rollback']})
 
 
 def _parse_overrides(raw):
@@ -591,12 +594,26 @@ def api_bracket_predicted():
     interactive "what-if" manipulation: a forced winner advances and every later
     slot it feeds is re-resolved to honor the change. The applied overrides are
     echoed back so the client can drop any that no longer take effect.
+
+    An optional ?rollback=<YYYY-MM-DD | start> rewinds the tournament to the end
+    of that matchday first (JOE-50): later real results — and the Elo form they
+    fed the model — are unwound, the affected matches unlock and re-project, and
+    the response carries the stripped match numbers (`rolled_back`) plus the
+    as-of group `standings` so the client can rewind the rails too.
     """
     depth = request.args.get('depth', 'final')
     allowed = _depth_rounds(depth)
     overrides = _parse_overrides(request.args.get('overrides'))
+    cutoff = rollback.parse_param(request.args.get('rollback'))
     conn = _conn()
-    data = predict.projected_bracket(conn, overrides)
+    data = predict.projected_bracket(conn, overrides, rollback=cutoff)
+    standings = None
+    if cutoff:
+        standings = {
+            g: [{'rank': r['rank'], 'team': r['team'], 'points': r['points'],
+                 'played': r['played'], 'code': flag_code(r['team'])}
+                for r in rows]
+            for g, rows in rollback.standings_as_of(conn, cutoff).items()}
     conn.close()
 
     def side(s):                       # fresh copy + flag code (don't mutate cache)
@@ -605,8 +622,23 @@ def api_bracket_predicted():
     slots = {num: {'round': e['round'], 'locked': e.get('locked', False),
                    'team1': side(e['team1']), 'team2': side(e['team2'])}
              for num, e in data['slots'].items() if e['round'] in allowed}
-    return jsonify({'depth': depth, 'n_finished': data['n_finished'], 'slots': slots,
-                    'overrides': data['overrides']})
+    payload = {'depth': depth, 'n_finished': data['n_finished'], 'slots': slots,
+               'overrides': data['overrides'], 'rollback': data['rollback'],
+               'rolled_back': data['rolled_back']}
+    if standings is not None:
+        payload['standings'] = standings
+    return jsonify(payload)
+
+
+@bp.route('/api/rollback/points')
+def api_rollback_points():
+    """Matchdays the bracket can be rolled back to: every date with at least one
+    finished result (ascending, with counts). The client offers "end of <date>"
+    for each, plus the special 'start' value (before the first whistle)."""
+    conn = _conn()
+    pts = rollback.points(conn)
+    conn.close()
+    return jsonify({'points': pts, 'start_value': rollback.START})
 
 
 @bp.route('/api/pundits')

@@ -132,6 +132,7 @@
   // re-resolves every downstream slot around them. `overrides` is {matchNum: team}.
   const predToggle = document.getElementById('predToggle');
   const depthSel = document.getElementById('depthSel');
+  const rollbackSel = document.getElementById('rollbackSel');
   const resetBtn = document.getElementById('resetPicks');
   const pickHint = document.getElementById('pickHint');
   const pickStatus = document.getElementById('pickStatus');
@@ -141,7 +142,9 @@
   const pickToast = document.getElementById('pickToast');
   let projected = false;
   let overrides = {};
+  let rollback = '';            // '' = live; 'YYYY-MM-DD' or 'start' = rewind (JOE-50)
   let toastTimer;
+  const railOrig = new Map();   // rail-table id -> original rows, for rollback restore
 
   // surface what the projection is doing so a failed/empty fetch is never silent
   function setStatus(msg, kind) {
@@ -177,12 +180,51 @@
   function clearProjection() {
     inner.querySelectorAll('.bm-side.predicted').forEach(side => {
       if (side.dataset.orig !== undefined) side.innerHTML = side.dataset.orig;
-      side.classList.remove('predicted', 'decided', 'locked');
+      // restore the full server-rendered class list: a rolled-back side had its
+      // `win` tint stripped while it was being re-projected, and that must come
+      // back the moment the projection (or the roll-back) is dropped
+      if (side.dataset.origCls !== undefined) side.className = side.dataset.origCls;
+      else side.classList.remove('predicted', 'decided', 'locked');
       delete side.dataset.team;
       delete side.dataset.match;
     });
-    inner.querySelectorAll('.bmatch.has-pred, .bmatch.forced')
-      .forEach(b => b.classList.remove('has-pred', 'forced'));
+    inner.querySelectorAll('.bmatch.has-pred, .bmatch.forced, .bmatch.rolled-back')
+      .forEach(b => b.classList.remove('has-pred', 'forced', 'rolled-back'));
+    restoreRails();
+  }
+
+  // ── group-rail rewind (JOE-50) ─────────────────────────────────────────────
+  // Under a roll-back the group tables on the rails must show the standings as
+  // they stood at the cutoff, not today's — the server sends them along with the
+  // projection. Original rows are kept aside and restored when the roll-back ends.
+  function applyRails(standings) {
+    document.querySelectorAll('table.rail-group').forEach(tbl => {
+      const letter = tbl.id.split('-').pop();
+      const rows = standings[letter];
+      const body = tbl.tBodies[0];
+      if (!rows || !body) return;
+      if (!railOrig.has(tbl.id)) railOrig.set(tbl.id, body.innerHTML);
+      Array.from(body.rows).forEach((tr, i) => {
+        const r = rows[i];
+        if (!r) return;
+        tr.className = r.rank <= 2 ? 'adv' : r.rank === 3 ? 'third' : 'out';
+        const flag = r.code
+          ? `<img class="flag-img" src="https://flagcdn.com/${r.code}.svg" width="22" height="16"> ` : '';
+        tr.innerHTML = `<td class="pos">${r.rank}</td>` +
+          `<td class="tname">${flag}<span class="tn">${r.team}</span></td>` +
+          `<td class="pts">${r.points}</td>`;
+      });
+      tbl.classList.add('rolled-back');
+    });
+  }
+
+  function restoreRails() {
+    railOrig.forEach((html, id) => {
+      const tbl = document.getElementById(id);
+      if (tbl && tbl.tBodies[0]) tbl.tBodies[0].innerHTML = html;
+      if (tbl) tbl.classList.remove('rolled-back');
+    });
+    railOrig.clear();
   }
 
   // briefly flash a set of boxes so a re-projection is never silent — the user
@@ -208,13 +250,17 @@
     if (!(window.WC && window.WC.bracketPredUrl)) return;
     const params = new URLSearchParams({ depth: depthSel.value });
     if (Object.keys(overrides).length) params.set('overrides', JSON.stringify(overrides));
-    setStatus('Projecting the rest of the bracket…', 'loading');
+    if (rollback) params.set('rollback', rollback);
+    setStatus(rollback ? 'Rolling back and re-forecasting the tournament…'
+                       : 'Projecting the rest of the bracket…', 'loading');
     const prev = snapshotSlots();         // remember teams before re-projecting
     fetch(window.WC.bracketPredUrl + '?' + params.toString())
       .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
       .then(d => {
         // reconcile to what the engine actually applied (drops stale/invalid picks)
         overrides = Object.assign({}, d.overrides || {});
+        // matches whose real result was rolled back: unlocked, re-forecast, pickable
+        const rolledBack = new Set((d.rolled_back || []).map(Number));
         clearProjection();
         let filled = 0;
         const moved = new Set();          // boxes whose projected team changed
@@ -227,17 +273,25 @@
             const slot = e[k];
             if (!slot || !side) return;
             const tbd = side.classList.contains('tbd');
+            // a rolled-back side holds a real (played) team in the DOM, but under
+            // the roll-back its occupant is a forecast again — treat it as projected
+            const proj = tbd || rolledBack.has(+num);
             // A finished match is settled — its real teams can't be re-picked. But an
             // UNPLAYED knockout match whose two teams are already known (every R32
             // match once the groups are decided, say) is still steerable: you pick
             // which of the two real teams advances, exactly as for a projected
-            // pairing. Only fully-decided (locked) matches stay non-interactive.
+            // pairing. Only fully-decided (locked) matches stay non-interactive —
+            // and a rolled-back match is no longer decided (the engine unlocks it).
             if (!tbd && e.locked) return;   // keep settled/finished teams as-is
-            if (side.dataset.orig === undefined) side.dataset.orig = side.innerHTML;
+            if (side.dataset.orig === undefined) {
+              side.dataset.orig = side.innerHTML;
+              side.dataset.origCls = side.className;
+            }
             side.classList.add('predicted');
+            side.classList.remove('win');   // a rolled-back result has no winner yet
             // a real (already-qualified) team isn't a projection — don't italicise
             // it or label it with a trivial 100% confidence, but keep it clickable
-            if (!tbd) side.classList.add('decided');
+            if (!proj) side.classList.add('decided');
             side.dataset.team = slot.team;
             side.dataset.match = num;
             const locked = overrides[num] === slot.team;
@@ -250,7 +304,7 @@
             const flag = slot.code
               ? `<img class="flag-img" src="https://flagcdn.com/${slot.code}.svg" width="22" height="16"> ` : '';
             side.innerHTML = `${flag}<span class="name">${slot.team}</span>` +
-              (tbd ? `<span class="conf" title="model confidence">${conf}%</span>` : '') +
+              (proj ? `<span class="conf" title="model confidence">${conf}%</span>` : '') +
               (locked ? '<span class="lock" title="your pick to advance">✓</span>' : '');
             // a slot whose team differs from what was here before has "moved"
             if (prev['m' + num + ':' + i] && prev['m' + num + ':' + i] !== slot.team) {
@@ -261,7 +315,9 @@
           });
           if (pickable) box.classList.add('has-pred');       // only outline steerable boxes
           if (overrides[num]) box.classList.add('forced');   // box-level pick marker
+          if (rolledBack.has(+num)) box.classList.add('rolled-back');
         });
+        if (d.standings) applyRails(d.standings);            // rewind the group rails too
         updateResetBtn();
         // always flash the box the user clicked (so a pick is never silent, even
         // when forcing the already-favoured team leaves the bracket unchanged)
@@ -270,19 +326,27 @@
         if (clickedNum) flash.add('m' + clickedNum);
         flashBoxes(flash);
         const n = Object.keys(overrides).length;
+        // roll-back context first, so the user always knows which "world" the
+        // projection lives in (live vs an earlier matchday)
+        const nRb = (d.rolled_back || []).length;
+        const rbLabel = rollbackSel && rollbackSel.selectedIndex >= 0
+          ? rollbackSel.options[rollbackSel.selectedIndex].textContent : '';
+        const rbMsg = d.rollback
+          ? `Rolled back ${nRb} played result${nRb === 1 ? '' : 's'} (${rbLabel}) — ` +
+            `standings, form and forecast rewound. ` : '';
         if (!filled) {
           setStatus('No projected slots to fill — every knockout team here is already decided.', 'warn');
         } else if (clickedNum && moved.size) {
-          setStatus(`Pick applied — ${moved.size} downstream slot${moved.size > 1 ? 's' : ''} ` +
+          setStatus(rbMsg + `Pick applied — ${moved.size} downstream slot${moved.size > 1 ? 's' : ''} ` +
                     `updated. ${n} forced pick${n > 1 ? 's' : ''} active.`, 'ok');
         } else if (clickedNum) {
-          setStatus(`Pick locked in. (It matched the model's projection, so nothing ` +
+          setStatus(rbMsg + `Pick locked in. (It matched the model's projection, so nothing ` +
                     `downstream changed.) ${n} forced pick${n > 1 ? 's' : ''} active.`, 'ok');
         } else if (n) {
-          setStatus(`Showing your what-if with ${n} forced pick${n > 1 ? 's' : ''} — ` +
+          setStatus(rbMsg + `Showing your what-if with ${n} forced pick${n > 1 ? 's' : ''} — ` +
                     `${filled} projected slots re-resolved around ${n > 1 ? 'them' : 'it'}.`, 'ok');
         } else {
-          setStatus(`${filled} slots projected from the model. Click any italic team to force it through.`, 'ok');
+          setStatus(rbMsg + `${filled} slots projected from the model. Click any italic team to force it through.`, 'ok');
         }
       })
       .catch(err => {                       // never fail silently — tell the user
@@ -328,6 +392,42 @@
     resetBtn.addEventListener('click', () => { overrides = {}; applyProjection(); });
   }
 
+  // ── roll-back picker (JOE-50) ───────────────────────────────────────────────
+  // Offers "end of <matchday>" for every day that has finished results (latest
+  // first; the most recent day IS the live state so it's skipped) plus "before
+  // the tournament". Loaded once, on first entering Projected mode.
+  let rollbackLoaded = false;
+  function loadRollbackPoints() {
+    if (rollbackLoaded || !rollbackSel || !(window.WC && window.WC.rollbackPointsUrl)) return;
+    rollbackLoaded = true;
+    fetch(window.WC.rollbackPointsUrl)
+      .then(r => { if (!r.ok) throw new Error('HTTP ' + r.status); return r.json(); })
+      .then(d => {
+        const pts = d.points || [];
+        if (!pts.length) return;          // nothing played yet -> nothing to rewind
+        const fmt = ds => new Date(ds + 'T12:00:00Z')
+          .toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        pts.slice(0, -1).reverse().forEach(p => {
+          const o = document.createElement('option');
+          o.value = p.date;
+          o.textContent = 'end of ' + fmt(p.date);
+          rollbackSel.appendChild(o);
+        });
+        const o = document.createElement('option');
+        o.value = d.start_value || 'start';
+        o.textContent = 'before the tournament';
+        rollbackSel.appendChild(o);
+      })
+      .catch(() => { rollbackLoaded = false; });   // retry on next toggle
+  }
+
+  if (rollbackSel) {
+    rollbackSel.addEventListener('change', () => {
+      rollback = rollbackSel.value;
+      if (projected) applyProjection();
+    });
+  }
+
   if (predToggle) {
     predToggle.querySelectorAll('button').forEach(b => {
       b.addEventListener('click', () => {
@@ -335,9 +435,11 @@
         b.classList.add('active');
         projected = b.dataset.pred === '1';
         depthSel.disabled = !projected;
+        if (rollbackSel) rollbackSel.disabled = !projected;
         inner.classList.toggle('projecting', projected);
         if (pickHint) pickHint.hidden = !projected;
-        if (projected) { applyProjection(); } else { clearProjection(); setStatus(''); }
+        if (projected) { loadRollbackPoints(); applyProjection(); }
+        else { clearProjection(); setStatus(''); }
         updateResetBtn();
       });
     });

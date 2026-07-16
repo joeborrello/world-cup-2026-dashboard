@@ -140,7 +140,7 @@ def test_prediction_cache_is_kept_per_database(tmp_path, monkeypatch):
     """Alternating requests for two editions must not evict each other."""
     calls = []
     monkeypatch.setattr(predict, "_aggregate",
-                        lambda c, sims: calls.append(1) or {"n": len(calls)})
+                        lambda c, sims, cutoff=None: calls.append(1) or {"n": len(calls)})
     paths = [str(tmp_path / "a.db"), str(tmp_path / "b.db")]
     conns = []
     for p in paths:
