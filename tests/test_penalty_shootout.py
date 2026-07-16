@@ -429,7 +429,7 @@ def test_projection_cache_busts_when_a_shootout_is_backfilled_in_place(monkeypat
     monkeypatch.setattr(
         predict, "_aggregate",
         lambda c, sims: (calls.__setitem__("n", calls["n"] + 1) or {"agg": calls["n"]}))
-    predict._cache.update(key=None, agg=None)
+    predict._cache.clear()
     try:
         before = n_finished()
         a1 = predict._aggregate_cached(conn, sims=50, seed=1)
@@ -445,7 +445,7 @@ def test_projection_cache_busts_when_a_shootout_is_backfilled_in_place(monkeypat
         predict._aggregate_cached(conn, sims=50, seed=1)
         assert calls["n"] == 2                  # result changed -> cache recomputed
     finally:
-        predict._cache.update(key=None, agg=None)
+        predict._cache.clear()
 
 
 # ── 8. the PROJECTED bracket never advances the Elo favorite of a finished tie ─
@@ -504,14 +504,14 @@ def test_projection_cache_holds_when_nothing_changed(monkeypatch):
     monkeypatch.setattr(
         predict, "_aggregate",
         lambda c, sims: (calls.__setitem__("n", calls["n"] + 1) or {"agg": calls["n"]}))
-    predict._cache.update(key=None, agg=None)
+    predict._cache.clear()
     try:
         predict._aggregate_cached(conn, sims=50, seed=1)
         predict._aggregate_cached(conn, sims=50, seed=1)
         predict._aggregate_cached(conn, sims=50, seed=1)
         assert calls["n"] == 1
     finally:
-        predict._cache.update(key=None, agg=None)
+        predict._cache.clear()
 
 
 # ── 9. the PRIMARY openfootball sync decides the match end-to-end ─────────────

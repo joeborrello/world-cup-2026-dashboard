@@ -28,7 +28,11 @@ import config
 from flags import flag_code
 
 TTL_SECONDS = 45
-_CACHE = {"data": None, "ts": 0.0, "checked_at": None}
+_CACHE = {}     # edition key -> {"data": ..., "ts": ..., "checked_at": ...}
+
+
+def _slot(key):
+    return _CACHE.setdefault(key, {"data": None, "ts": 0.0, "checked_at": None})
 
 # A regulation half is 45'; the interval between halves is ~15 real minutes, so
 # once we're past the break the elapsed clock runs ~15' ahead of the match clock.
@@ -140,26 +144,31 @@ def _parse_kickoff(utc):
         return None
 
 
-def last_checked():
+def last_checked(key="men"):
     """ISO timestamp of the most recent successful live check, or None."""
-    return _CACHE["checked_at"]
+    return _slot(key)["checked_at"]
 
 
-def live_matches(conn):
+def live_matches(conn, url=None, key="men"):
+    """In-play matches for one edition (`url` = its football-data feed; an
+    edition with no feed yet gets an empty ticker, cached like any result)."""
+    cache = _slot(key)
+    if url is None:
+        url = config.FOOTBALL_DATA_URL
     now = time.time()
-    if _CACHE["data"] is not None and now - _CACHE["ts"] < TTL_SECONDS:
-        return _CACHE["data"]
-    if not config.FOOTBALL_DATA_API_KEY:
-        _CACHE.update(data=[], ts=now, checked_at=_utcnow().isoformat())
+    if cache["data"] is not None and now - cache["ts"] < TTL_SECONDS:
+        return cache["data"]
+    if not config.FOOTBALL_DATA_API_KEY or not url:
+        cache.update(data=[], ts=now, checked_at=_utcnow().isoformat())
         return []
 
     try:
-        r = requests.get(config.FOOTBALL_DATA_URL,
+        r = requests.get(url,
                          headers={"X-Auth-Token": config.FOOTBALL_DATA_API_KEY}, timeout=12)
         r.raise_for_status()
         payload = r.json()
     except Exception:
-        return _CACHE["data"] or []        # serve last-known on error
+        return cache["data"] or []        # serve last-known on error
 
     checked_at = _utcnow()
     out = []
@@ -199,5 +208,5 @@ def live_matches(conn):
             "utc_datetime": row["utc_datetime"],
             "tag": (f"Group {row['group_letter']}" if row["group_letter"] else row["round_label"]),
         })
-    _CACHE.update(data=out, ts=now, checked_at=checked_at.isoformat())
+    cache.update(data=out, ts=now, checked_at=checked_at.isoformat())
     return out

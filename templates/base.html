@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}World Cup 2026{% endblock %}</title>
+  <title>{% block title %}{{ edition.title }}{% endblock %}</title>
   <link rel="icon" type="image/svg+xml" href="{{ url_for('static', filename='favicon.svg') }}">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
   {# Link-preview cards: when the URL is pasted into Discord, iMessage/SMS, Slack,
@@ -12,47 +12,61 @@
      og:image is absolute (_external) because scrapers require a full URL. #}
   <meta name="description" content="{{ self.og_description() }}">
   <meta property="og:type" content="website">
-  <meta property="og:site_name" content="World Cup 2026 Dashboard">
-  <meta property="og:title" content="{% block og_title %}World Cup 2026 Dashboard{% endblock %}">
-  <meta property="og:description" content="{% block og_description %}Follow the 2026 FIFA World Cup in one place — a live bracket and group tables, interactive maps, match-day weather, a live score ticker, a Golden Boot tracker, and an Elo prediction engine.{% endblock %}">
+  <meta property="og:site_name" content="{{ edition.title }} Dashboard">
+  <meta property="og:title" content="{% block og_title %}{{ edition.title }} Dashboard{% endblock %}">
+  <meta property="og:description" content="{% block og_description %}{{ edition.og_description }}{% endblock %}">
   <meta property="og:url" content="{{ request.url }}">
-  <meta property="og:image" content="{{ url_for('static', filename='og/preview.png', _external=True) }}">
+  {% if edition.og_image %}
+  <meta property="og:image" content="{{ url_for('static', filename=edition.og_image, _external=True) }}">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="World Cup 2026 Dashboard">
-  <meta name="twitter:card" content="summary_large_image">
+  <meta property="og:image:alt" content="{{ edition.title }} Dashboard">
+  {% endif %}
+  <meta name="twitter:card" content="summary{{ '_large_image' if edition.og_image }}">
   <meta name="twitter:title" content="{{ self.og_title() }}">
   <meta name="twitter:description" content="{{ self.og_description() }}">
-  <meta name="twitter:image" content="{{ url_for('static', filename='og/preview.png', _external=True) }}">
+  {% if edition.og_image %}
+  <meta name="twitter:image" content="{{ url_for('static', filename=edition.og_image, _external=True) }}">
+  {% endif %}
   {% block head %}{% endblock %}
 </head>
 <body>
   <header class="topbar">
-    <a class="brand" href="{{ url_for('index') }}">
-      <span class="ball">⚽</span> World Cup 2026
-      <span class="hosts">🇨🇦 🇺🇸 🇲🇽</span>
+    <a class="brand" href="{{ url_for('.index') }}">
+      <span class="ball">⚽</span> {{ edition.title }}
+      <span class="hosts">{{ edition.hosts_flags }}</span>
     </a>
+    {% set ep = (request.endpoint or '.index').split('.')[-1] %}
     <nav>
-      {% set page = request.path %}
-      <a href="{{ url_for('index') }}" class="{{ 'active' if page == '/' }}">Today</a>
-      <a href="{{ url_for('groups') }}" class="{{ 'active' if page.endswith('/groups') }}">Groups</a>
-      <a href="{{ url_for('bracket') }}" class="{{ 'active' if page.endswith('/bracket') }}">Bracket</a>
-      <a href="{{ url_for('predictions_page') }}" class="{{ 'active' if page.endswith('/predictions') }}">Predictions</a>
-      <a href="{{ url_for('what_if_page') }}" class="{{ 'active' if page.endswith('/what-if') }}">What if?</a>
-      <a href="{{ url_for('golden_boot_page') }}" class="{{ 'active' if page.endswith('/golden-boot') }}">Golden Boot</a>
-      <a href="{{ url_for('map_view') }}" class="{{ 'active' if page.endswith('/map') }}">Daily map</a>
-      <a href="{{ url_for('schedule_map') }}" class="{{ 'active' if page.endswith('/schedule-map') }}">All games</a>
-      <a href="{{ url_for('team_map') }}" class="{{ 'active' if page.endswith('/team-map') }}">Follow a team</a>
+      <a href="{{ url_for('.index') }}" class="{{ 'active' if ep == 'index' }}">Today</a>
+      <a href="{{ url_for('.groups') }}" class="{{ 'active' if ep == 'groups' }}">Groups</a>
+      <a href="{{ url_for('.bracket') }}" class="{{ 'active' if ep == 'bracket' }}">Bracket</a>
+      <a href="{{ url_for('.predictions_page') }}" class="{{ 'active' if ep == 'predictions_page' }}">Predictions</a>
+      <a href="{{ url_for('.what_if_page') }}" class="{{ 'active' if ep == 'what_if_page' }}">What if?</a>
+      <a href="{{ url_for('.golden_boot_page') }}" class="{{ 'active' if ep == 'golden_boot_page' }}">Golden Boot</a>
+      <a href="{{ url_for('.map_view') }}" class="{{ 'active' if ep == 'map_view' }}">Daily map</a>
+      <a href="{{ url_for('.schedule_map') }}" class="{{ 'active' if ep == 'schedule_map' }}">All games</a>
+      <a href="{{ url_for('.team_map') }}" class="{{ 'active' if ep == 'team_map' }}">Follow a team</a>
     </nav>
+    <div class="edition-switch" role="navigation" aria-label="Tournament">
+      {% for tab in edition_tabs %}
+      <a href="{{ tab.href }}" class="{{ 'current' if tab.current }}"
+         {% if not tab.current %}title="Switch to the {{ tab.edition.title }}"{% endif %}
+        >{{ tab.edition.nav_label }}</a>
+      {% endfor %}
+    </div>
   </header>
   <main>
     <div id="liveTicker" class="live-ticker" hidden></div>
+    {% if pre_draw %}
+    <div class="pre-draw-note">🗓️ {{ edition.pre_draw_note }}</div>
+    {% endif %}
     {% block content %}{% endblock %}
   </main>
   <footer>
-    <span>Jun 11 – Jul 19, 2026 · 48 teams · 16 cities · 104 matches · times shown in your local timezone</span>
+    <span>{{ edition.footer }}</span>
   </footer>
-  <script>window.WC_LIVE = "{{ url_for('api_live') }}";</script>
+  <script>window.WC_LIVE = "{{ url_for('.api_live') }}";</script>
   <script src="{{ url_for('static', filename='js/util.js') }}"></script>
   <script src="{{ url_for('static', filename='js/live.js') }}"></script>
   {% block scripts %}{% endblock %}

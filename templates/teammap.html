@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Follow a team · World Cup 2026{% endblock %}
+{% block title %}Follow a team · {{ edition.title }}{% endblock %}
 
 {% block head %}
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
@@ -40,10 +40,10 @@
 {% block scripts %}
 <script>
   window.WC = {
-    matchesUrl: "{{ url_for('api_matches') }}",
-    venuesUrl: "{{ url_for('api_venues') }}",
-    teamsUrl: "{{ url_for('api_teams') }}",
-    weatherUrl: "{{ url_for('api_weather') }}",
+    matchesUrl: "{{ url_for('.api_matches') }}",
+    venuesUrl: "{{ url_for('.api_venues') }}",
+    teamsUrl: "{{ url_for('.api_teams') }}",
+    weatherUrl: "{{ url_for('.api_weather') }}",
     start: "{{ start }}",
     end: "{{ end }}"
   };

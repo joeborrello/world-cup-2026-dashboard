@@ -1,11 +1,11 @@
 {% extends "base.html" %}
 {% from "macros.html" import match_card %}
-{% block title %}Today · World Cup 2026{% endblock %}
+{% block title %}Today · {{ edition.title }}{% endblock %}
 
 {% block content %}
 <section class="hero">
   <h1 id="todayTitle">Today's matches</h1>
-  <p class="subtle" id="todaySub">{{ n_finished }} of 104 matches played so far</p>
+  <p class="subtle" id="todaySub">{{ n_finished }} of {{ n_total }} matches played so far</p>
 </section>
 
 <div class="match-grid" id="matchGrid" hidden>
@@ -14,16 +14,16 @@
 <p class="empty" id="noMatches" hidden>No upcoming matches found.</p>
 
 <section class="quicklinks">
-  <a class="card-link" href="{{ url_for('groups') }}"><h3>📊 Groups</h3><p>All 12 group standings, live.</p></a>
-  <a class="card-link" href="{{ url_for('bracket') }}"><h3>🏆 Bracket</h3><p>Round of 32 → Final, with feeder groups.</p></a>
-  <a class="card-link" href="{{ url_for('predictions_page') }}"><h3>🔮 Predictions</h3><p>Title odds, qualification chances & a projected bracket.</p></a>
-  <a class="card-link" href="{{ url_for('map_view') }}"><h3>🗺️ Daily map</h3><p>Scroll day-by-day: when & where every game is played.</p></a>
-  <a class="card-link" href="{{ url_for('schedule_map') }}"><h3>📅 All games</h3><p>Every fixture mapped across the 16 host cities.</p></a>
-  <a class="card-link" href="{{ url_for('team_map') }}"><h3>🧭 Follow a team</h3><p>Trace one or more teams' journey across the map.</p></a>
+  <a class="card-link" href="{{ url_for('.groups') }}"><h3>📊 Groups</h3><p>{{ edition.groups_blurb }}</p></a>
+  <a class="card-link" href="{{ url_for('.bracket') }}"><h3>🏆 Bracket</h3><p>{{ edition.bracket_blurb }}</p></a>
+  <a class="card-link" href="{{ url_for('.predictions_page') }}"><h3>🔮 Predictions</h3><p>Title odds, qualification chances & a projected bracket.</p></a>
+  <a class="card-link" href="{{ url_for('.map_view') }}"><h3>🗺️ Daily map</h3><p>Scroll day-by-day: when & where every game is played.</p></a>
+  <a class="card-link" href="{{ url_for('.schedule_map') }}"><h3>📅 All games</h3><p>{{ edition.cities_blurb }}</p></a>
+  <a class="card-link" href="{{ url_for('.team_map') }}"><h3>🧭 Follow a team</h3><p>Trace one or more teams' journey across the map.</p></a>
 </section>
 {% endblock %}
 
 {% block scripts %}
-<script>window.WC_NFIN = {{ n_finished }};</script>
+<script>window.WC_NFIN = {{ n_finished }}; window.WC_NTOTAL = {{ n_total }};</script>
 <script src="{{ url_for('static', filename='js/today.js') }}"></script>
 {% endblock %}

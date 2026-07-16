@@ -124,15 +124,34 @@ def compute_standings(conn):
     return {g: order_group(teams, finished) for g, teams in table.items()}
 
 
-def rank_third_place(standings):
-    """Return the 3rd-placed teams ranked best->worst; top 8 qualify."""
+def count_third_place_slots(conn):
+    """How many best-third knockout slots this tournament's bracket has.
+
+    Derived from the format itself: opening-round berths minus the two
+    automatic berths per group — 2·16 − 2·12 = 8 in the men's 48-team format,
+    2·8 − 2·8 = 0 in a 32-team edition. Counting the "3X/Y/Z" slot
+    placeholders instead would break mid-tournament: the feed rewrites them to
+    real team names once the thirds are assigned."""
+    n_open = conn.execute(
+        "SELECT COUNT(*) FROM matches WHERE stage='knockout' AND round_label="
+        "(SELECT round_label FROM matches WHERE stage='knockout' "
+        " ORDER BY num LIMIT 1)").fetchone()[0]
+    n_groups = conn.execute(
+        "SELECT COUNT(DISTINCT group_letter) FROM matches "
+        "WHERE stage='group'").fetchone()[0]
+    return max(0, 2 * n_open - 2 * n_groups)
+
+
+def rank_third_place(standings, n_qualify=8):
+    """Return the 3rd-placed teams ranked best->worst; the top `n_qualify`
+    qualify (0 in a format whose bracket has no third-place slots)."""
     thirds = [g[2] for g in standings.values() if len(g) >= 3]
     thirds = sorted(
         thirds, key=lambda r: (-r["points"], -r["gd"], -r["gf"], r["team"])
     )
     for i, r in enumerate(thirds, start=1):
         r["third_rank"] = i
-        r["qualified_third"] = i <= 8
+        r["qualified_third"] = i <= n_qualify
     return thirds
 
 
@@ -328,7 +347,7 @@ def resolve_bracket(conn, standings, thirds=None):
 def recompute_all(conn):
     """Run the full derivation pipeline. Safe to call after any score update."""
     standings = compute_standings(conn)
-    thirds = rank_third_place(standings)
+    thirds = rank_third_place(standings, n_qualify=count_third_place_slots(conn))
     persist_standings(conn, standings, thirds)
     resolve_bracket(conn, standings, thirds)
     return standings, thirds
