@@ -788,6 +788,15 @@ body.modal-open { overflow: hidden; }
   background: rgba(227, 178, 60, .22); color: #6b5210; padding: .05rem .35rem; border-radius: 999px;
   vertical-align: middle; margin-left: .15rem; }
 
+/* Out of the Golden Boot race — same cross-off treatment as eliminated teams
+ * on the predictions page (odds-table tr.ot-out). */
+.gb-table tr.gb-out td { color: var(--muted); }
+.gb-table tr.gb-out .who { font-weight: 500; }
+.gb-table tr.gb-out .name { text-decoration: line-through; }
+.gb-table tr.gb-out .flag-img { filter: grayscale(1); opacity: .6; }
+.gb-table tr.gb-out .goals, .gb-table tr.gb-out .proj,
+.gb-table tr.gb-out .projtot { color: var(--muted); font-weight: 600; }
+
 .gb-note { margin-top: .8rem; font-size: .82rem; }
 .gb-empty { background: var(--card); border: 1px solid var(--line); border-radius: 12px;
   padding: 2.4rem 1rem; text-align: center; box-shadow: var(--shadow); }

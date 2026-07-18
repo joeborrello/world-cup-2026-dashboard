@@ -48,10 +48,10 @@
     </thead>
     <tbody>
       {% for p in gb.contenders %}
-      <tr class="gb-row{% if p.in_contention %} contention{% endif %}{% if p.rank == 1 %} leader{% endif %}"
+      <tr class="gb-row{% if p.in_contention %} contention{% endif %}{% if p.rank == 1 %} leader{% endif %}{% if p.out_of_race %} gb-out{% endif %}"
           data-goals="{{ p.goals }}" data-proj="{{ p.proj_total }}" data-player="{{ p.player }}">
         <td class="pos" data-rank="{{ p.rank }}">{{ p.rank }}</td>
-        <td class="who"><span class="flag">{{ p.team | flag }}</span><span class="name">{{ p.player }}</span>
+        <td class="who"{% if p.out_of_race %} title="Out of the race — {{ p.team }} can play no more matches"{% endif %}><span class="flag">{{ p.team | flag }}</span><span class="name">{{ p.player }}</span>
           {%- if p.in_contention %} <span class="cbadge" title="Within {{ gb.contention_gap }} of the lead">in contention</span>{% endif %}</td>
         <td class="team">{{ p.team }}</td>
         <td class="num goals">{{ p.goals }}</td>

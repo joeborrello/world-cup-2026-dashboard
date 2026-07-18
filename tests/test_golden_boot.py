@@ -262,10 +262,150 @@ def test_tracker_payload_shape_and_contention(conn):
         assert p["proj_add_low"] <= p["proj_add_high"]
         assert p["proj_total_low"] == p["goals"] + p["proj_add_low"]
         assert p["proj_total_high"] >= p["goals"]
-    # contention flag matches the documented gap
+    # contention flag matches the documented gap (out-of-race players are
+    # never badged "in contention" — the flags would contradict each other)
     leader = data["leader_goals"]
     for p in board:
-        assert p["in_contention"] == (p["goals"] >= leader - data["contention_gap"])
+        assert "out_of_race" in p
+        assert p["in_contention"] == (
+            p["goals"] >= leader - data["contention_gap"] and not p["out_of_race"])
+        if p["out_of_race"]:
+            assert p["goals"] < leader, "a player level with the lead stays in"
+
+
+# ── out of the race (JOE-53) ────────────────────────────────────────────────
+# A contender whose team can play no more matches, and whose (now final) tally
+# is short of the lead, is crossed off like eliminated teams on /predictions.
+
+def _add_match(c, num, stage, team1, team2, status='finished', score1=None,
+               score2=None, pen1=None, pen2=None, round_label=None, group=None):
+    c.execute(
+        "INSERT INTO matches (num, stage, group_letter, round_label, team1, "
+        "team2, status, score1, score2, pen1, pen2) VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+        (num, stage, group, round_label, team1, team2, status,
+         score1, score2, pen1, pen2))
+
+
+def test_done_playing_knockout_loser_is_done():
+    c = _mem()
+    _add_match(c, 97, 'knockout', 'T1', 'T2', score1=2, score2=0,
+               round_label='Quarter-final')
+    _add_match(c, 98, 'knockout', 'T3', 'T4', status='scheduled',
+               round_label='Quarter-final')
+    done = goldenboot._teams_done_playing(c)
+    assert done == {'T2'}
+
+
+def test_done_playing_shootout_decides_but_level_score_alone_does_not():
+    c = _mem()
+    # level after extra time, shootout recorded -> loser done
+    _add_match(c, 97, 'knockout', 'T1', 'T2', score1=1, score2=1,
+               pen1=4, pen2=2, round_label='Quarter-final')
+    # level with NO shootout in the data yet -> decides nothing
+    _add_match(c, 98, 'knockout', 'T3', 'T4', score1=0, score2=0,
+               round_label='Quarter-final')
+    assert goldenboot._teams_done_playing(c) == {'T2'}
+
+
+def test_done_playing_semifinal_loser_keeps_third_place_match():
+    c = _mem()
+    _add_match(c, 101, 'knockout', 'T1', 'T2', score1=1, score2=0,
+               round_label='Semi-final')
+    # the semi-final loser still has the third-place match to score in
+    assert goldenboot._teams_done_playing(c) == set()
+    # ...but once the third-place match is played, both its teams are done
+    _add_match(c, 103, 'knockout', 'T2', 'T3', score1=2, score2=2,
+               round_label='Match for third place')
+    assert goldenboot._teams_done_playing(c) == {'T2', 'T3'}
+
+
+def test_done_playing_final_ends_both_teams():
+    c = _mem()
+    _add_match(c, 104, 'knockout', 'T1', 'T2', score1=3, score2=1,
+               round_label='Final')
+    assert goldenboot._teams_done_playing(c) == {'T1', 'T2'}
+
+
+def test_done_playing_group_exit_waits_for_resolved_opening_round():
+    c = _mem()
+    for num, (t1, t2, status) in enumerate(
+            [('T1', 'T2', 'finished'), ('T1', 'T3', 'finished'),
+             ('T2', 'T3', 'finished')], start=1):
+        _add_match(c, num, 'group', t1, t2, status=status,
+                   score1=1, score2=0, group='A')
+    # opening-round pairing not yet resolved to team names -> nobody is out
+    _add_match(c, 89, 'knockout', 'T1', None, status='scheduled',
+               round_label='Round of 16')
+    assert goldenboot._teams_done_playing(c) == set()
+    # once the field is known, teams that missed it are done
+    c.execute("UPDATE matches SET team2='T2' WHERE num=89")
+    assert goldenboot._teams_done_playing(c) == {'T3'}
+
+
+def test_done_playing_group_exit_waits_for_all_group_matches():
+    c = _mem()
+    _add_match(c, 1, 'group', 'T1', 'T2', status='finished',
+               score1=1, score2=0, group='A')
+    _add_match(c, 2, 'group', 'T1', 'T3', status='scheduled', group='A')
+    _add_match(c, 89, 'knockout', 'T1', 'T2', status='scheduled',
+               round_label='Round of 16')
+    assert goldenboot._teams_done_playing(c) == set()
+
+
+def _seed_group_a(c, *scores):
+    """Three finished group-A matches (T1-T2, T1-T3, T2-T3) so the projection
+    engine sees a full group with a third place."""
+    fixtures = [('T1', 'T2'), ('T1', 'T3'), ('T2', 'T3')]
+    for num, ((t1, t2), (s1, s2)) in enumerate(zip(fixtures, scores), start=1):
+        _add_match(c, num, 'group', t1, t2, status='finished',
+                   score1=s1, score2=s2, group='A')
+
+
+def test_tracker_flags_out_of_race():
+    c = _mem()
+    # group stage done; T2 lost the quarter-final so their scorers are frozen
+    _seed_group_a(c, (2, 1), (1, 0), (1, 0))
+    _add_match(c, 97, 'knockout', 'T1', 'T2', score1=2, score2=0,
+               round_label='Quarter-final')
+    _add_scorer(c, 1, 'T1', 'Alpha')
+    _add_scorer(c, 97, 'T1', 'Alpha')
+    _add_scorer(c, 97, 'T1', 'Alpha', minute='60')
+    _add_scorer(c, 1, 'T2', 'Beta')
+    c.commit()
+
+    data = goldenboot.tracker(c, sims=30, seed=SEED)
+    by_name = {p["player"]: p for p in data["contenders"]}
+    # Beta: team out of matches AND short of the 3-goal lead -> crossed off,
+    # and no longer badged "in contention" despite being within the gap
+    assert by_name["Beta"]["out_of_race"] is True
+    assert by_name["Beta"]["in_contention"] is False
+    # the leader is never out of the race
+    assert by_name["Alpha"]["out_of_race"] is False
+    assert by_name["Alpha"]["in_contention"] is True
+
+
+def test_tracker_keeps_done_player_level_with_lead_in_the_race():
+    c = _mem()
+    _seed_group_a(c, (1, 1), (0, 0), (0, 0))
+    _add_match(c, 97, 'knockout', 'T1', 'T2', score1=1, score2=0,
+               round_label='Quarter-final')
+    _add_scorer(c, 1, 'T2', 'Beta')                  # level with the leader
+    _add_scorer(c, 1, 'T1', 'Alpha')
+    c.commit()
+
+    data = goldenboot.tracker(c, sims=30, seed=SEED)
+    by_name = {p["player"]: p for p in data["contenders"]}
+    # Beta's tally is final but still level with the lead — they can yet share
+    # (or keep) the Golden Boot, so they are NOT crossed off
+    assert by_name["Beta"]["out_of_race"] is False
+
+
+def test_template_and_css_cross_off_out_of_race():
+    tpl = _read('templates', 'goldenboot.html')
+    assert 'gb-out' in tpl and 'out_of_race' in tpl
+    css = _read('static', 'css', 'style.css')
+    assert '.gb-table tr.gb-out .name' in css
+    assert 'line-through' in css
 
 
 def test_tracker_handles_no_goals():
