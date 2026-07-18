@@ -9,7 +9,10 @@ tracker works with no API key. Rules follow the real Golden Boot:
   * penalties DO count toward a player's tally,
   * own goals do NOT (they are recorded with `owngoal=1` but never credited),
   * the leader is whoever has the most goals; players within CONTENTION_GAP of
-    that lead are flagged "in contention".
+    that lead are flagged "in contention",
+  * a player whose team can play no more matches and whose (now final) tally is
+    short of the lead is flagged "out_of_race" — the UI crosses them off just
+    like eliminated teams on the predictions page.
 
 The projection reuses the Monte-Carlo prediction engine (predict.py). A
 contender's scoring *rate* (goals per match their team has played) is carried
@@ -100,6 +103,54 @@ def leaderboard(conn):
             prev_goals = p["goals"]
         p["rank"] = rank
     return board
+
+
+# ── race elimination ─────────────────────────────────────────────────────────
+def _teams_done_playing(conn):
+    """Teams whose tournament is over — they cannot appear in another match.
+
+    Judged only from decisively finished results, mirroring the philosophy of
+    predict._eliminated_teams (never from Monte-Carlo sampling), but answering a
+    different question: a semi-final loser is out of the *title* race yet still
+    has the third-place match to score in, so for the Golden Boot a team is only
+    done when:
+
+      * it lost a decisively finished knockout match that was NOT a semi-final
+        (semi-final losers go on to the third-place match), or
+      * it played in a finished third-place match or final — after those, both
+        participants are out of matches whoever won, or
+      * every group match is finished, the opening knockout round's pairings
+        have all resolved to real team names, and it isn't in that field (the
+        same both-conditions guard the predictions page uses, since best-third
+        assignment can lag the final group whistle).
+    """
+    ko = [dict(r) for r in conn.execute(
+        "SELECT num, team1, team2, status, score1, score2, pen1, pen2, "
+        "round_label FROM matches WHERE stage='knockout'")]
+    groups = conn.execute(
+        "SELECT team1, team2, status FROM matches WHERE stage='group'").fetchall()
+
+    done = set()
+    for m in ko:
+        rnd = predict.ROUND_KEYS.get(m["round_label"])
+        if rnd in ("third", "final"):
+            if m["status"] == "finished" and m["team1"] and m["team2"]:
+                done.update((m["team1"], m["team2"]))
+        else:
+            decided = predict._finished_decision(m)
+            if decided and rnd != "sf":
+                done.add(decided[1])
+
+    if groups and all(r["status"] == "finished" for r in groups):
+        first = min(ko, key=lambda m: m["num"], default=None)
+        opening = [m for m in ko
+                   if first and m["round_label"] == first["round_label"]]
+        if opening and all(m["team1"] and m["team2"] for m in opening):
+            field = {m[side] for m in opening for side in ("team1", "team2")}
+            group_teams = {r[side] for r in groups for side in ("team1", "team2")
+                           if r[side]}
+            done |= group_teams - field
+    return done
 
 
 # ── projection (ties into the prediction engine) ────────────────────────────
@@ -238,8 +289,16 @@ def tracker(conn, sims=None, seed=None):
         remaining = _expected_remaining_matches(conn, odds)
         project(board, odds, played, remaining)
         leader_goals = board[0]["goals"]
+        done = _teams_done_playing(conn)
         for p in board:
-            p["in_contention"] = p["goals"] >= leader_goals - CONTENTION_GAP
+            # Out of the race outright: the team can play no more matches, so
+            # the tally is final — and it is already short of the current lead.
+            # (A done player level with the leader can still finish top, so
+            # they stay in.) Crossed off in the UI like eliminated teams on
+            # the predictions page.
+            p["out_of_race"] = p["team"] in done and p["goals"] < leader_goals
+            p["in_contention"] = (p["goals"] >= leader_goals - CONTENTION_GAP
+                                  and not p["out_of_race"])
     else:
         leader_goals = 0
 
