@@ -159,7 +159,7 @@
       <a class="card" href="https://droplet.josephborrello.com/worldcup/predictions"><div class="ico">🎲</div><h3>Prediction engine</h3>
         <p>An Elo Monte-Carlo simulator — with form-adjusting ratings and a Dixon–Coles draw model — projects title odds, qualification odds and a single consistent projected bracket, depth-selectable from R32 to the Final.</p></a>
       <a class="card" href="https://droplet.josephborrello.com/worldcup/predictions"><div class="ico">🕹️</div><h3>Interactive bracket</h3>
-        <p>Steer the projected knockouts: click any team to force it through, and the bracket re-walks every slot it feeds — play out your own what-if run, then reset in one tap.</p></a>
+        <p>Steer the projected knockouts: click any team to force it through, and the bracket re-walks every slot it feeds — or roll the whole bracket back to an earlier matchday and re-forecast from there.</p></a>
       <a class="card" href="https://droplet.josephborrello.com/worldcup/golden-boot"><div class="ico">👟</div><h3>Golden Boot tracker</h3>
         <p>The top-scorer race — penalties count, own goals don't — with a projected whole-goal range of additional goals scaled by how far each striker's team is simulated to go.</p></a>
       <a class="card" href="https://droplet.josephborrello.com/worldcup/predictions"><div class="ico">📈</div><h3>Form tracker</h3>
@@ -168,6 +168,10 @@
         <p>Every projection is explained: an in-app popup documents the Elo, Poisson goals, draw correction and Monte-Carlo — assumptions and limits included.</p></a>
       <a class="card" href="https://droplet.josephborrello.com/worldcup/predictions"><div class="ico">🎙️</div><h3>AI pundit panel</h3>
         <p>A MiroFish-inspired panel of Claude personas debates the race, grounded in the model's numbers — with built-in cost controls.</p></a>
+      <a class="card" href="https://droplet.josephborrello.com/worldcup/what-if"><div class="ico">🔀</div><h3>What-if scenario mapper</h3>
+        <p>Ask any free-form scenario question and get a mapped tree of branches — probabilities, consequences and who benefits — grounded in the played results and the model's numbers.</p></a>
+      <a class="card" href="https://droplet.josephborrello.com/worldcup/women/"><div class="ico">🏆</div><h3>Women's World Cup 2027</h3>
+        <p>The whole dashboard runs a second edition: Brazil 2027 mounts at /women with its own data, ratings and branding — every page lights up as fixtures land.</p></a>
     </div>
   </div>
 </section>
@@ -211,6 +215,22 @@
         <p>The follow-a-team map now shows each match's kickoff weather too — actual conditions for games played, forecast for those upcoming — sharing one formatter with the daily map.</p></div>
       <div class="step"><div class="tag">Stage 16 · Live</div><h4>Faster refresh &amp; minute of play</h4>
         <p>Live scores refresh every 5 minutes, and the ticker shows the minute of play as of the most recent check — football-data's own minute when present, otherwise estimated from kickoff.</p></div>
+      <div class="step"><div class="tag">Stage 17 · Sharing</div><h4>Rich link previews</h4>
+        <p>Open Graph / Twitter Card metadata and a 1200×630 preview image on both the app and this page, so a pasted link unfurls in Discord, iMessage, Slack, WhatsApp and X.</p></div>
+      <div class="step"><div class="tag">Stage 18 · Knockouts</div><h4>Shootouts settled right</h4>
+        <p>Knockout ties are decided by the full result from every data source, the shootout winner is named on match cards and the ticker, extra time gets its own live badge, and a match is presumed live once its scheduled kickoff passes.</p></div>
+      <div class="step"><div class="tag">Stage 19 · Maps</div><h4>Daily-map round-up</h4>
+        <p>Covered vs open-air stadiums noted, upcoming days show their match-ups, a TODAY button jumps the slider home, live weather rolls over at 2am local like the rest of the site, and overlays say when they're loading — or failed.</p></div>
+      <div class="step"><div class="tag">Stage 20 · AI</div><h4>What-if scenario mapper</h4>
+        <p>The free-form half of the MiroFish idea: ask a scenario question and get a branch map of outcomes — probabilities, consequences, who benefits — grounded in the played results and the model, generated in the background under the same cost controls as the pundits.</p></div>
+      <div class="step"><div class="tag">Stage 21 · Polish</div><h4>Out of the race, crossed off</h4>
+        <p>Teams that can no longer win the title, and Golden Boot contenders who can no longer catch the leader, are struck through automatically as results land.</p></div>
+      <div class="step"><div class="tag">Stage 22 · Editions</div><h4>One engine, two World Cups</h4>
+        <p>An editions abstraction pulls everything tournament-specific — database, data feeds, venues, Elo priors, branding — out of the core, and the whole app (pages, updater, prediction engine, pundits) is threaded through it.</p></div>
+      <div class="step"><div class="tag">Stage 23 · Predictions</div><h4>Roll back &amp; re-forecast</h4>
+        <p>A matchday picker rewinds the projected bracket to any earlier point: later results are stripped from the working view (never the database), the dynamic Elo rewinds with them, and settled matches unlock so you can steer the replay.</p></div>
+      <div class="step"><div class="tag">Stage 24 · Editions</div><h4>Women's World Cup 2027 goes live</h4>
+        <p>Brazil 2027 is seeded and verified end-to-end at /women — provisional fixtures, flags and branding included — while the completed men's 2026 tournament stays on record at the site root.</p></div>
     </div>
   </div>
 </section>
@@ -228,7 +248,7 @@
       <span class="chip">Vanilla JS</span>
       <span class="chip">Open-Meteo · RainViewer · NWS</span>
       <span class="chip">football-data.org</span>
-      <span class="chip">Anthropic Claude API</span>
+      <span class="chip">Anthropic Claude (via the claude CLI)</span>
     </div>
     <p class="note">Live scores via football-data.org (free tier, slightly delayed) with a keyless openfootball
       fallback. Elo ratings start from an early-2026 snapshot and update from in-tournament results.
